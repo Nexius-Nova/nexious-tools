@@ -1,0 +1,77 @@
+import express from 'express'
+import { query, queryOne, execute } from '../db.js'
+
+const router = express.Router()
+
+router.get('/conversations', async (req, res) => {
+  try {
+    const rows = await query(`
+      SELECT DISTINCT conversation_id, MIN(created_at) as started_at, 
+             (SELECT content FROM ai_messages m2 WHERE m2.conversation_id = m1.conversation_id AND m2.role = 'user' ORDER BY created_at ASC LIMIT 1) as first_message
+      FROM ai_messages m1
+      GROUP BY conversation_id
+      ORDER BY started_at DESC
+      LIMIT 50
+    `)
+    res.json({ data: rows })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.get('/conversations/:conversationId', async (req, res) => {
+  try {
+    const rows = await query(
+      'SELECT id, conversation_id, role, content, refs, created_at FROM ai_messages WHERE conversation_id = ? ORDER BY created_at ASC',
+      [req.params.conversationId]
+    )
+    const messages = rows.map(row => {
+      let references = []
+      if (row.refs) {
+        try {
+          references = typeof row.refs === 'string' ? JSON.parse(row.refs) : row.refs
+        } catch (e) {
+          console.error('解析references失败:', e)
+          references = []
+        }
+      }
+      return {
+        id: row.id,
+        conversation_id: row.conversation_id,
+        role: row.role,
+        content: row.content,
+        references,
+        created_at: row.created_at
+      }
+    })
+    res.json({ data: messages })
+  } catch (error) {
+    console.error('加载对话失败:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.post('/messages', async (req, res) => {
+  const { conversation_id, role, content, references } = req.body
+  try {
+    const refsJson = references ? JSON.stringify(references) : null
+    const result = await execute(
+      'INSERT INTO ai_messages (conversation_id, role, content, refs) VALUES (?, ?, ?, ?)',
+      [conversation_id, role, content, refsJson]
+    )
+    res.json({ data: { id: result.lastInsertRowid || result.insertId, conversation_id, role, content, references } })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.delete('/conversations/:conversationId', async (req, res) => {
+  try {
+    await execute('DELETE FROM ai_messages WHERE conversation_id = ?', [req.params.conversationId])
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+export default router
