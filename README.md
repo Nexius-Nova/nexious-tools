@@ -4,7 +4,7 @@
 
 ## 功能特性
 
-### 🔗 网站管理
+### 网站管理
 - 网站链接的增删改查
 - 自动获取网站图标
 - 支持本地图片上传作为图标
@@ -12,28 +12,28 @@
 - 卡片/列表视图切换
 - 分类筛选与搜索
 
-### 🔐 密码管理
+### 密码管理
 - 密码加密存储（AES-256）
 - 密码生成器
 - 一键复制密码
 - 关联网站信息
 - 安全的密码显示/隐藏
 
-### 📝 代码片段
+### 代码片段
 - 多语言代码高亮
 - 分类管理
 - 标签系统
 - 快速搜索
 - 一键复制
 
-### 🤖 AI 助手
+### AI 助手
 - 流式对话响应
 - 多轮对话记忆
 - 引用数据上下文
 - 支持 OpenAI / 自定义 API
 - 对话历史管理
 
-### ⚡ 快速搜索
+### 快速搜索
 - 全局快捷键 `Ctrl+K` 唤起
 - 实时搜索网站、密码、代码片段
 - 深色/浅色主题切换
@@ -50,7 +50,7 @@
 | 构建工具 | Vite 5 |
 | 桌面框架 | Electron 29 |
 | 后端服务 | Express.js |
-| 数据库 | MySQL 8 |
+| 数据库 | SQLite（默认）/ MySQL 8 |
 | 加密 | CryptoJS (AES-256) |
 
 ## 项目结构
@@ -62,7 +62,12 @@ nexious-tools/
 │   └── preload.js            # 预加载脚本
 ├── server/                   # 后端服务
 │   ├── index.js              # 服务入口
-│   ├── db.js                 # 数据库连接
+│   ├── db.js                 # 数据库操作封装
+│   ├── db-config.js          # 数据库配置
+│   ├── db-sqlite.js          # SQLite 适配器
+│   ├── db-adapters/          # 数据库适配器
+│   │   ├── sqlite-adapter.js
+│   │   └── mysql-adapter.js
 │   └── routes/               # API 路由
 │       ├── websites.js       # 网站 API
 │       ├── passwords.js      # 密码 API
@@ -81,6 +86,8 @@ nexious-tools/
 ├── database/                 # 数据库脚本
 │   ├── init.sql              # 初始化脚本
 │   └── test-data.sql         # 测试数据
+├── data/                     # 数据存储目录
+│   └── nexious_tools.db      # SQLite 数据库文件
 ├── package.json
 └── vite.config.js
 ```
@@ -90,18 +97,19 @@ nexious-tools/
 ### 环境要求
 
 - Node.js >= 18
-- MySQL >= 5.7
 - npm 或 pnpm
 
 ### 安装依赖
 
 ```bash
-npm install
-# 或
 pnpm install
 ```
 
 ### 数据库配置
+
+项目默认使用 SQLite，无需额外配置，开箱即用。
+
+如需使用 MySQL：
 
 1. 创建数据库：
 
@@ -115,23 +123,25 @@ CREATE DATABASE nexious_tools CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 mysql -u root -p nexious_tools < database/init.sql
 ```
 
-3. 修改数据库连接配置（`server/db.js`）：
+3. 修改 `server/db-config.js`：
 
 ```javascript
-const pool = mysql.createPool({
-  host: 'localhost',
-  user: 'your_username',
-  password: 'your_password',
-  database: 'nexious_tools',
-  waitForConnections: true,
-  connectionLimit: 10
-});
+let dbType = 'mysql'  // 改为 mysql
+let dbConfig = {
+  mysql: {
+    host: 'localhost',
+    port: 3306,
+    user: 'your_username',
+    password: 'your_password',
+    database: 'nexious_tools'
+  }
+}
 ```
 
 ### 开发模式
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 此命令会同时启动：
@@ -142,20 +152,15 @@ npm run dev
 ### 构建打包
 
 ```bash
-# Windows
-npm run build:win
+# 构建前端
+pnpm build
 
-# macOS
-npm run build:mac
-
-# Linux
-npm run build:linux
-
-# 当前平台
-npm run build
+# 打包应用
+pnpm package   # 生成 out/ 目录
+pnpm make      # 生成安装包
 ```
 
-打包产物位于 `dist-electron/` 目录。
+打包产物位于 `out/` 目录。
 
 ## 配置说明
 
@@ -228,35 +233,6 @@ npm run build
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | /api/ai/chat | AI 对话（流式响应） |
-
-## 部署说明
-
-### Windows 安装包
-
-1. 执行 `npm run build:win`
-2. 在 `dist-electron/` 目录找到安装包
-3. 双击安装程序进行安装
-
-### macOS 安装包
-
-1. 执行 `npm run build:mac`
-2. 在 `dist-electron/` 目录找到 DMG 文件
-3. 双击 DMG 文件，拖拽到 Applications 文件夹
-
-### Linux 安装包
-
-1. 执行 `npm run build:linux`
-2. 在 `dist-electron/` 目录找到 AppImage 文件
-3. 添加执行权限：`chmod +x nexious-tools-x.x.x.AppImage`
-4. 运行：`./nexious-tools-x.x.x.AppImage`
-
-### 生产环境数据库
-
-生产环境建议：
-1. 使用独立的 MySQL 服务器
-2. 配置数据库连接池
-3. 启用 SSL 连接
-4. 定期备份数据库
 
 ## 开发指南
 
