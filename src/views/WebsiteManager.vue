@@ -57,7 +57,7 @@
 
     <n-grid
       v-if="viewMode === 'card'"
-      :cols="3"
+      :cols="responsiveCols"
       :x-gap="16"
       :y-gap="16"
       responsive="screen"
@@ -300,7 +300,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, h } from "vue";
+import { ref, computed, onMounted, onUnmounted, h } from "vue";
 import {
   NButton,
   NSpace,
@@ -423,6 +423,28 @@ const filteredItems = computed(() => {
   return result;
 });
 
+const windowWidth = ref(window.innerWidth)
+
+const updateWindowWidth = () => {
+  windowWidth.value = window.innerWidth
+}
+
+onMounted(() => {
+  window.addEventListener('resize', updateWindowWidth)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateWindowWidth)
+})
+
+const responsiveCols = computed(() => {
+  const width = windowWidth.value;
+  if (width < 480) return 1;
+  if (width < 768) return 2;
+  if (width < 1200) return 3;
+  return 4;
+});
+
 const startEdit = (row) => {
   editingRowKey.value = row.id;
   editingData.value = { ...row };
@@ -442,7 +464,8 @@ const saveEdit = async (row) => {
       favicon: editingData.value.favicon,
       description: editingData.value.description,
       app_path: editingData.value.app_path,
-      type: editingData.value.type
+      type: editingData.value.type,
+      search_url: editingData.value.search_url
     };
     await websiteApi.update(row.id, updateData);
     updateWebsite(row.id, updateData);
@@ -603,6 +626,46 @@ const columns = [
         });
       }
       return row.description || "-";
+    }
+  },
+  {
+    title: "搜索URL",
+    key: "search_url",
+    width: 150,
+    ellipsis: { tooltip: true },
+    render(row) {
+      if (editingRowKey.value === row.id) {
+        return h(NInputComponent, {
+          value: editingData.value.search_url,
+          onUpdateValue: (v) => {
+            editingData.value.search_url = v;
+          },
+          size: "small",
+          placeholder: "搜索URL模板"
+        });
+      }
+      return row.search_url || "-";
+    }
+  },
+  {
+    title: "图标URL",
+    key: "favicon_edit",
+    width: 150,
+    ellipsis: { tooltip: true },
+    render(row) {
+      if (editingRowKey.value === row.id) {
+        return h(NInputComponent, {
+          value: editingData.value.favicon,
+          onUpdateValue: (v) => {
+            editingData.value.favicon = v;
+          },
+          size: "small",
+          placeholder: "图标URL"
+        });
+      }
+      return h(NText, { depth: 3, style: "font-size: 12px;" }, {
+        default: () => row.favicon ? "已设置" : "-"
+      });
     }
   },
   {
@@ -817,10 +880,6 @@ const deselectAll = () => {
 
 const getFirstWord = (name) => {
   if (!name) return "A";
-  const words = name.split(/[\s\-_\.]+/).filter(w => w.length > 0);
-  if (words.length > 0) {
-    return words[0].charAt(0).toUpperCase() + (words[0].length > 1 ? words[0].charAt(1).toLowerCase() : "");
-  }
   return name.charAt(0).toUpperCase();
 };
 
@@ -1145,5 +1204,87 @@ onMounted(() => {
   top: 8px;
   right: 8px;
   color: var(--primary-color, #667eea);
+}
+
+@media (max-width: 1200px) {
+  .app-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .website-manager .n-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  
+  .app-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .website-manager .page-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  
+  .website-manager .n-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .app-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .website-card {
+    padding: 12px;
+  }
+  
+  .card-icon-wrapper {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .card-icon {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .card-icon-placeholder {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .website-manager .page-header {
+    padding: 0 4px;
+  }
+  
+  .website-manager .n-button-group {
+    flex-wrap: wrap;
+  }
+  
+  .app-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .app-card {
+    padding: 12px 8px;
+  }
+  
+  .app-card-icon {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .app-icon-img,
+  .app-icon-fallback {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+  }
 }
 </style>

@@ -13,7 +13,6 @@ function createWindow() {
     height: 60,
     width: 600,
     frame: false,
-    // transparent: true,
     useContentSize: true,
     resizable: false,
     icon: path.join(__dirname, "assets/logo.svg"),
@@ -40,6 +39,10 @@ function createWindow() {
     if (bounds.width < 900) {
       mainWindow?.minimize()
     }
+  })
+  
+  mainWindow.once("ready-to-show", () => {
+    registerGlobalShortcut(currentShortcut)
   })
 }
 
@@ -83,25 +86,41 @@ function startServer() {
     return
   }
   const serverPath = app.isPackaged
-    ? path.join(process.resourcesPath, "server/index.js")
+    ? path.join(process.resourcesPath, "dist-server/server.cjs")
     : path.join(__dirname, "../server/index.js")
 
-  serverProcess = spawn("node", [serverPath], {
-    stdio: "inherit",
+  const nodePath = process.execPath
+  
+  serverProcess = spawn(nodePath, [serverPath], {
+    stdio: "pipe",
+    windowsHide: true,
     env: {
       ...process.env,
       NODE_ENV: app.isPackaged ? "production" : "development",
-      RESOURCES_PATH: app.isPackaged ? process.resourcesPath : path.join(__dirname, "..")
+      RESOURCES_PATH: app.isPackaged ? process.resourcesPath : path.join(__dirname, ".."),
+      ELECTRON_RUN_AS_NODE: "1"
     }
+  })
+  
+  serverProcess.stdout.on('data', (data) => {
+    console.log(`[Server] ${data}`)
+  })
+  serverProcess.stderr.on('data', (data) => {
+    console.error(`[Server Error] ${data}`)
   })
 }
 
 app.whenReady().then(() => {
   startServer()
-  setTimeout(() => {
-    createWindow()
+  createWindow()
+  
+  app.focus()
+})
+
+app.on("browser-window-focus", () => {
+  if (!globalShortcut.isRegistered(currentShortcut)) {
     registerGlobalShortcut(currentShortcut)
-  }, 100)
+  }
 })
 
 app.on("window-all-closed", () => {

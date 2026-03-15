@@ -204,9 +204,6 @@ watch(internalShow, (val) => {
 const getFirstWord = (name) => {
   if (!name) return "W"
   const words = name.split(/[\s\-_\.]+/).filter(w => w.length > 0)
-  if (words.length > 0) {
-    return words[0].charAt(0).toUpperCase() + (words[0].length > 1 ? words[0].charAt(1).toLowerCase() : "")
-  }
   return name.charAt(0).toUpperCase()
 }
 
@@ -279,21 +276,8 @@ const fetchFavicon = async () => {
     return
   }
   
-  fetchingFavicon.value = true
-  try {
-    const response = await websiteApi.getFavicon(form.url)
-    if (response.data.data?.favicon) {
-      form.favicon = response.data.data.favicon
-      message.success('图标已获取')
-    } else {
-      message.warning('未找到图标')
-    }
-  } catch (error) {
-    console.error('获取favicon失败:', error)
-    message.error('获取图标失败')
-  } finally {
-    fetchingFavicon.value = false
-  }
+  form.favicon = `https://favicon.im/${domain}?larger=true`
+  message.success('图标已获取')
 }
 
 const autoFetchFavicon = async () => {

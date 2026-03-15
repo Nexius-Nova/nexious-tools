@@ -1,10 +1,18 @@
-import mysql from 'mysql2/promise'
-
+let mysql = null
 let pool = null
 
-export function initMySQL(config) {
+async function loadMySQL() {
+  if (!mysql) {
+    mysql = await import('mysql2/promise')
+  }
+  return mysql
+}
+
+export async function initMySQL(config) {
+  await loadMySQL()
   pool = mysql.createPool({
     host: config.host || 'localhost',
+    port: config.port || 3306,
     user: config.user || 'root',
     password: config.password || '',
     database: config.database || 'nexious_tools',
@@ -17,12 +25,12 @@ export function initMySQL(config) {
   return new Promise((resolve, reject) => {
     pool.getConnection()
       .then(conn => {
-        console.log('✅ MySQL 数据库连接成功')
+        console.log('MySQL 数据库连接成功')
         conn.release()
         resolve()
       })
       .catch(err => {
-        console.error('❌ MySQL 数据库连接失败:', err.message)
+        console.error('MySQL 数据库连接失败:', err.message)
         reject(err)
       })
   })
@@ -59,8 +67,9 @@ export async function mysqlInsert(table, data) {
   const columns = Object.keys(data)
   const placeholders = columns.map(() => '?').join(', ')
   const sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`
+  const values = Object.values(data)
   
-  const [result] = await pool.execute(sql, params)
+  const [result] = await pool.execute(sql, values)
   return {
     insertId: result.insertId,
     ...data

@@ -90,7 +90,6 @@ router.get('/favicon', async (req, res) => {
     }
     
     let input = url.trim().toLowerCase()
-    console.log('获取favicon请求:', input)
     
     if (!input.startsWith('http://') && !input.startsWith('https://')) {
       input = 'https://' + input
@@ -109,71 +108,34 @@ router.get('/favicon', async (req, res) => {
       return res.status(400).json({ error: '请输入有效的网站域名或URL' })
     }
     
-    console.log('解析后的hostname:', hostname)
-    
-    try {
-      const params = new URLSearchParams()
-      params.append('domain', hostname)
-      
-      console.log('请求uutool API...')
-      const uutoolResponse = await axios.post(
-        'https://api.uutool.cn/webIcon/',
-        params,
-        {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          timeout: 15000
-        }
-      )
-      console.log('uutool API响应:', JSON.stringify(uutoolResponse.data).substring(0, 200))
-      
-      if (uutoolResponse.data?.status === 1 && uutoolResponse.data?.data?.img_data?.base64) {
-        const imgData = uutoolResponse.data.data.img_data
-        const mimeType = imgData.type || 'image/png'
-        const base64Url = `data:${mimeType};base64,${imgData.base64}`
-        console.log('uutool API成功获取图标')
-        return res.json({ data: { favicon: base64Url, domain: hostname } })
-      } else {
-        console.log('uutool API返回无效:', uutoolResponse.data?.error || '未知错误')
-      }
-    } catch (e) {
-      console.log('uutool API 请求失败:', e.message)
-    }
-    
-    console.log('尝试备用API...')
     const faviconApis = [
+      `https://favicon.im/${hostname}?larger=true`,
       `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=128`,
       `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${encodeURIComponent(hostname)}&size=128`,
       `https://icons.duckduckgo.com/ip2/${encodeURIComponent(hostname)}.ico`
     ]
     
     for (const faviconUrl of faviconApis) {
-      console.log('尝试:', faviconUrl)
       try {
         const response = await axios.get(faviconUrl, { 
           responseType: 'arraybuffer',
-          timeout: 15000,
+          timeout: 10000,
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
           }
         })
         
         if (response.data && response.data.byteLength > 0) {
           const base64 = `data:image/png;base64,${Buffer.from(response.data, 'binary').toString('base64')}`
-          console.log('备用API成功获取图标')
           return res.json({ data: { favicon: base64, domain: hostname } })
         }
       } catch (e) {
-        console.log(`尝试 ${faviconUrl} 失败:`, e.message)
         continue
       }
     }
     
-    console.log('所有API都失败')
     res.status(404).json({ error: '未找到图标' })
   } catch (error) {
-    console.error('获取favicon失败:', error.message)
     res.status(500).json({ error: '获取图标失败' })
   }
 })
