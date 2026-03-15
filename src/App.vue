@@ -514,8 +514,8 @@ onUnmounted(() => {
 .app-container {
   display: flex;
   flex-direction: column;
-  /* background-color: transparent; */
   border-radius: 8px;
+  height: 100%;
 }
 
 .app-container.full-app {
@@ -533,15 +533,15 @@ onUnmounted(() => {
   padding: 24px;
   overflow-y: auto;
   background-color: var(--bg-color);
-  height: calc(100vh - 40px);
+  height: calc(100vh - var(--title-bar-height));
 }
 
 .content-header {
-  /* margin-bottom: 16px; */
+  margin-bottom: 12px;
 }
 
 .back-btn {
-  color: var(--text-color-secondary);
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
@@ -566,9 +566,7 @@ onUnmounted(() => {
   border-top-right-radius: 10px;
   padding: 8px;
   -webkit-app-region: no-drag;
-  transition:
-    background 0.3s,
-    box-shadow 0.3s;
+  transition: background 0.3s, box-shadow 0.3s;
   display: flex;
   align-items: center;
 }
@@ -585,7 +583,7 @@ onUnmounted(() => {
   margin-right: 8px;
   flex-shrink: 0;
   -webkit-app-region: drag;
-  -webkit-user-select: none; /* 禁止文本选择 */
+  -webkit-user-select: none;
 }
 
 .search-box :deep(.n-input) {
@@ -607,31 +605,28 @@ onUnmounted(() => {
 }
 
 .settings-icon {
-  color: #999;
-  transition: color 0.2s;
-}
-
-.quick-search-content.dark-mode .settings-icon,
-.search-box.dark-mode .settings-icon {
-  color: rgba(255, 255, 255, 0.6);
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 8px;
+  color: var(--text-muted);
+  transition: all 0.2s;
 }
 
 .settings-icon:hover {
-  color: #667eea;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary);
 }
 
-.quick-search-content.dark-mode .settings-icon:hover,
 .search-box.dark-mode .settings-icon:hover {
-  color: #667eea;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .results-container {
   background: rgba(255, 255, 255, 0.98);
   border-bottom-left-radius: 10px;
   border-bottom-right-radius: 10px;
-  transition:
-    background 0.3s,
-    box-shadow 0.3s;
+  overflow-y: auto;
+  transition: background 0.3s, box-shadow 0.3s;
 }
 
 .results-container.dark-mode {
@@ -643,16 +638,6 @@ onUnmounted(() => {
   align-items: center;
   padding: 10px 14px;
   cursor: pointer;
-  transition: background-color 0.15s;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-.results-container.dark-mode .result-item {
-  border-bottom-color: rgba(255, 255, 255, 0.08);
-}
-
-.result-item:last-child {
-  border-bottom: none;
 }
 
 .result-item.selected,
@@ -675,6 +660,7 @@ onUnmounted(() => {
   border-radius: 8px;
   margin-right: 12px;
   color: #667eea;
+  flex-shrink: 0;
 }
 
 .results-container.dark-mode .result-icon {
@@ -685,12 +671,13 @@ onUnmounted(() => {
 .result-info {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
 .result-name {
   font-size: 14px;
   font-weight: 500;
-  color: #333;
+  color: var(--text-primary);
   margin-bottom: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -708,8 +695,8 @@ onUnmounted(() => {
 }
 
 .result-subtitle {
-  font-size: 11px;
-  color: #999;
+  font-size: 12px;
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -719,13 +706,25 @@ onUnmounted(() => {
   color: rgba(255, 255, 255, 0.5);
 }
 
+.result-tag {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+  white-space: nowrap;
+}
+
+.results-container.dark-mode .result-tag {
+  background: rgba(102, 126, 234, 0.2);
+  color: #8b9cf5;
+}
+
 .result-action {
-  color: #ccc;
+  font-size: 12px;
+  color: var(--text-muted);
   margin-left: 8px;
-  width: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  white-space: nowrap;
 }
 
 .results-container.dark-mode .result-action {
@@ -733,10 +732,59 @@ onUnmounted(() => {
 }
 
 .result-item.selected .result-action {
-  color: #0d74ea;
+  color: var(--primary-color);
 }
 
 .results-container.dark-mode .result-item.selected .result-action {
-  color: #667eea;
+  color: var(--primary-color);
+}
+
+@media (max-width: 900px) {
+  .content-area {
+    padding: 16px;
+  }
+  
+  .result-name {
+    font-size: 13px;
+  }
+  
+  .result-subtitle {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 768px) {
+  .content-area {
+    padding: 12px;
+  }
+  
+  .search-box :deep(.n-input) {
+    --n-height: 40px;
+    --n-font-size: 14px;
+  }
+  
+  .result-item {
+    padding: 8px 12px;
+  }
+  
+  .result-icon {
+    width: 32px;
+    height: 32px;
+    margin-right: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .content-area {
+    padding: 8px;
+  }
+  
+  .result-meta {
+    flex-wrap: wrap;
+  }
+  
+  .result-tag {
+    display: none;
+  }
 }
 </style>

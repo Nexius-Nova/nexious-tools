@@ -6,8 +6,29 @@ import { getDataPath, ensureDataDir } from './db-config.js'
 let db = null
 let SQL = null
 
+function getSqlJsWasmPath() {
+  const resourcesPath = process.env.RESOURCES_PATH || process.resourcesPath || ''
+  
+  const possiblePaths = [
+    path.join(resourcesPath, 'dist-server', 'sql.js-dist', 'sql-wasm.wasm'),
+    path.join(resourcesPath, 'sql.js-dist', 'sql-wasm.wasm'),
+    path.join(process.cwd(), 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm'),
+  ]
+  
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      return p
+    }
+  }
+  
+  return undefined
+}
+
 export async function initSqlite() {
-  SQL = await initSqlJs()
+  const wasmPath = getSqlJsWasmPath()
+  SQL = await initSqlJs({
+    locateFile: wasmPath ? () => wasmPath : undefined
+  })
   
   const dataPath = getDataPath()
   ensureDataDir()
@@ -106,7 +127,7 @@ export async function initSqlite() {
     const hasPinned = columns.some(col => col.name === 'pinned')
     if (!hasPinned) {
       db.run('ALTER TABLE code_snippets ADD COLUMN pinned INTEGER DEFAULT 0')
-      console.log('✅ 已添加 pinned 字段到 code_snippets 表')
+      console.log('已添加 pinned 字段到 code_snippets 表')
     }
   } catch (e) {
     console.log('添加 pinned 字段时出错:', e.message)
@@ -122,7 +143,7 @@ export async function initSqlite() {
     const hasSearchUrl = columns.some(col => col.name === 'search_url')
     if (!hasSearchUrl) {
       db.run('ALTER TABLE websites ADD COLUMN search_url VARCHAR(500)')
-      console.log('✅ 已添加 search_url 字段到 websites 表')
+      console.log('已添加 search_url 字段到 websites 表')
     }
   } catch (e) {
     console.log('添加 search_url 字段时出错:', e.message)
@@ -145,7 +166,7 @@ export async function initSqlite() {
   
   saveDatabase()
   
-  console.log('✅ SQLite 数据库初始化完成:', dbPath)
+  console.log('SQLite 数据库初始化完成:', dbPath)
   
   return db
 }

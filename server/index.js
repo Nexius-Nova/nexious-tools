@@ -41,10 +41,10 @@ async function startServer() {
   try {
     await initDb()
     app.listen(PORT, () => {
-      console.log(`🚀 API服务已启动: http://localhost:${PORT}`)
+      console.log(`API服务已启动: http://localhost:${PORT}`)
     })
   } catch (error) {
-    console.error('❌ 启动失败:', error)
+    console.error('启动失败:', error)
     process.exit(1)
   }
 }

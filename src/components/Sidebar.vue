@@ -15,7 +15,7 @@
 import { h } from 'vue'
 import { NMenu, NText, NIcon } from 'naive-ui'
 import { 
-  SearchOutline, 
+  GlobeOutline, 
   LockClosedOutline, 
   CodeSlashOutline, 
   SettingsOutline,
@@ -37,9 +37,9 @@ const renderIcon = (icon) => {
 
 const menuOptions = [
   {
-    label: '搜索管理',
+    label: '网站管理',
     key: 'websites',
-    icon: renderIcon(SearchOutline)
+    icon: renderIcon(GlobeOutline)
   },
   {
     label: '密码管理',

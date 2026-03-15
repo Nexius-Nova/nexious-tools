@@ -11,6 +11,8 @@
   --text-muted: #999999;
   --danger-color: #ff4d4f;
   --success-color: #52c41a;
+  --sidebar-width: 150px;
+  --title-bar-height: 40px;
 }
 
 [data-theme="purple"] {
@@ -62,6 +64,12 @@
   box-sizing: border-box;
 }
 
+html, body, #app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background-color: var(--bg-color);
@@ -110,4 +118,30 @@ input, select, textarea {
 
 button {
   font-family: inherit;
+}
+
+@media (max-width: 1200px) {
+  :root {
+    --sidebar-width: 130px;
+  }
+}
+
+@media (max-width: 900px) {
+  :root {
+    --sidebar-width: 100px;
+    --title-bar-height: 36px;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width: 60px;
+    --title-bar-height: 32px;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --sidebar-width: 50px;
+  }
 }
