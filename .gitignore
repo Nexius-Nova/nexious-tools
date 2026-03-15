@@ -3,6 +3,7 @@ node_modules
 out/
 .trae/
 dist/
+dist-server/
 
 debug.log
 data/*.db
