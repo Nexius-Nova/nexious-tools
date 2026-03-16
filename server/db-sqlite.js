@@ -117,6 +117,46 @@ export async function initSqlite() {
     )
   `)
   
+  db.run(`
+    CREATE TABLE IF NOT EXISTS clipboard_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      content TEXT NOT NULL,
+      content_type VARCHAR(20) DEFAULT 'text',
+      source_app VARCHAR(255),
+      is_favorite INTEGER DEFAULT 0,
+      copy_count INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  
+  db.run(`
+    CREATE TABLE IF NOT EXISTS doc_folders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name VARCHAR(100) NOT NULL,
+      parent_id INTEGER DEFAULT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  
+  db.run(`
+    CREATE TABLE IF NOT EXISTS documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title VARCHAR(255) NOT NULL,
+      content TEXT,
+      content_type VARCHAR(20) DEFAULT 'markdown',
+      folder_id INTEGER DEFAULT NULL,
+      source_url VARCHAR(500),
+      tags TEXT,
+      word_count INTEGER DEFAULT 0,
+      is_favorite INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  
   try {
     const stmt = db.prepare("PRAGMA table_info(code_snippets)")
     const columns = []

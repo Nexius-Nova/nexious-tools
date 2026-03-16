@@ -2,10 +2,12 @@ import { ref } from 'vue'
 import { websiteApi } from '../api/website'
 import { passwordApi } from '../api/password'
 import { snippetApi } from '../api/snippet'
+import { documentApi } from '../api/documents'
 
 const websites = ref([])
 const passwords = ref([])
 const snippets = ref([])
+const documents = ref([])
 const loading = ref(false)
 const loaded = ref(false)
 
@@ -14,14 +16,16 @@ const loadAllData = async (forceReload = false) => {
   
   loading.value = true
   try {
-    const [webRes, pwdRes, snpRes] = await Promise.all([
+    const [webRes, pwdRes, snpRes, docRes] = await Promise.all([
       websiteApi.getAll(),
       passwordApi.getAll(),
-      snippetApi.getAll()
+      snippetApi.getAll(),
+      documentApi.getAll()
     ])
     websites.value = webRes.data.data || []
     passwords.value = pwdRes.data.data || []
     snippets.value = snpRes.data.data || []
+    documents.value = docRes.data.data || []
     loaded.value = true
   } catch (error) {
     console.error('加载数据失败:', error)
@@ -115,17 +119,47 @@ const removeSnippet = (id) => {
   }
 }
 
+const reloadDocuments = async () => {
+  try {
+    const response = await documentApi.getAll()
+    documents.value = response.data.data || []
+  } catch (error) {
+    console.error('重新加载文档数据失败:', error)
+    throw error
+  }
+}
+
+const addDocument = (doc) => {
+  documents.value.push(doc)
+}
+
+const updateDocument = (id, data) => {
+  const index = documents.value.findIndex(d => d.id === id)
+  if (index !== -1) {
+    documents.value[index] = { ...documents.value[index], ...data }
+  }
+}
+
+const removeDocument = (id) => {
+  const index = documents.value.findIndex(d => d.id === id)
+  if (index !== -1) {
+    documents.value.splice(index, 1)
+  }
+}
+
 export function useData() {
   return {
     websites,
     passwords,
     snippets,
+    documents,
     loading,
     loaded,
     loadAllData,
     reloadWebsites,
     reloadPasswords,
     reloadSnippets,
+    reloadDocuments,
     addWebsite,
     updateWebsite,
     removeWebsite,
@@ -134,6 +168,9 @@ export function useData() {
     removePassword,
     addSnippet,
     updateSnippet,
-    removeSnippet
+    removeSnippet,
+    addDocument,
+    updateDocument,
+    removeDocument
   }
 }

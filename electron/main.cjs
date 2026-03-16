@@ -1,12 +1,16 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, desktopCapturer, nativeImage, globalShortcut } = require("electron")
+const { app, BrowserWindow, ipcMain, shell, dialog, desktopCapturer, nativeImage, globalShortcut, clipboard } = require("electron")
 const path = require("path")
 const { spawn, exec } = require("child_process")
 const fs = require("fs")
 const os = require("os")
+const axios = require("axios")
 
 let mainWindow
 let serverProcess
 let currentShortcut = "CommandOrControl+Shift+Space"
+let lastClipboardContent = ""
+let lastClipboardImage = ""
+let clipboardWatcher = null
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -486,4 +490,84 @@ ipcMain.handle("set-global-shortcut", (event, accelerator) => {
 
 ipcMain.handle("get-global-shortcut", () => {
   return currentShortcut
+})
+
+ipcMain.handle("set-auto-launch", async (event, enable) => {
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: enable,
+      openAsHidden: true,
+      name: "Nexious Tools"
+    })
+    return true
+  } catch (error) {
+    console.error("设置开机自启动失败:", error)
+    return false
+  }
+})
+
+ipcMain.handle("get-auto-launch", () => {
+  const settings = app.getLoginItemSettings()
+  return settings.openAtLogin
+})
+
+function startClipboardWatcher() {
+  if (clipboardWatcher) return
+  
+  lastClipboardContent = clipboard.readText() || ""
+  lastClipboardImage = clipboard.readImage().toDataURL()
+  
+  clipboardWatcher = setInterval(() => {
+    const currentText = clipboard.readText()
+    const currentImage = clipboard.readImage()
+    const currentImageData = currentImage.isEmpty() ? null : currentImage.toDataURL()
+    
+    if (currentImage && !currentImage.isEmpty() && currentImageData !== lastClipboardImage) {
+      lastClipboardImage = currentImageData
+      lastClipboardContent = currentText || ""
+      
+      axios.post("http://localhost:3000/api/clipboard", {
+        content: currentImageData,
+        content_type: "image"
+      }).catch(err => {
+        console.error("保存剪贴板图片失败:", err.message)
+      })
+    } else if (currentText && currentText !== lastClipboardContent) {
+      lastClipboardContent = currentText
+      
+      const contentType = detectContentType(currentText)
+      
+      axios.post("http://localhost:3000/api/clipboard", {
+        content: currentText,
+        content_type: contentType
+      }).catch(err => {
+        console.error("保存剪贴板内容失败:", err.message)
+      })
+    }
+  }, 1000)
+}
+
+function stopClipboardWatcher() {
+  if (clipboardWatcher) {
+    clearInterval(clipboardWatcher)
+    clipboardWatcher = null
+  }
+}
+
+function detectContentType(content) {
+  if (/^https?:\/\//.test(content)) return "url"
+  if (/^mailto:|^[\w.-]+@[\w.-]+\.\w+$/.test(content)) return "email"
+  if (/^tel:|^[\d\s\-+()]{7,}$/.test(content)) return "phone"
+  if (/^[({\[][\s\S]*[)}\]]$/.test(content) || /^(function|const|let|var|import|export|class)/.test(content)) return "code"
+  return "text"
+}
+
+ipcMain.handle("start-clipboard-watcher", () => {
+  startClipboardWatcher()
+  return true
+})
+
+ipcMain.handle("stop-clipboard-watcher", () => {
+  stopClipboardWatcher()
+  return true
 })

@@ -199,7 +199,7 @@ import { useData } from "./store/data";
 const router = useRouter();
 const route = useRoute();
 const { currentTheme, isDarkMode, themeOverrides, loadTheme } = useTheme();
-const { websites, passwords, snippets, loadAllData } = useData();
+const { websites, passwords, snippets, documents, loadAllData } = useData();
 
 const currentTab = ref("websites");
 const showQuickSearch = ref(false);
@@ -304,6 +304,19 @@ const quickResults = computed(() => {
     }
   });
 
+  documents.value.forEach((d) => {
+    const searchPrefix = spaceIndex > 0 ? query.substring(0, spaceIndex).toLowerCase() : query
+    if (d.title?.toLowerCase().includes(searchPrefix)) {
+      results.push({
+        ...d,
+        type: "document",
+        typeLabel: "文档",
+        name: d.title,
+        subtitle: d.source_url || '文档'
+      });
+    }
+  });
+
   return results.slice(0, 8);
 });
 
@@ -311,7 +324,8 @@ const getTagType = (type) => {
   const types = {
     website: "info",
     password: "warning",
-    snippet: "success"
+    snippet: "success",
+    document: "error"
   };
   return types[type] || "default";
 };
@@ -343,6 +357,10 @@ const handleQuickResultSelect = (item) => {
   } else if (item.type === "snippet") {
     showFullApp.value = true;
     router.push("/snippets");
+    showBackButton.value = true;
+  } else if (item.type === "document") {
+    showFullApp.value = true;
+    router.push("/documents");
     showBackButton.value = true;
   }
 };
@@ -503,6 +521,10 @@ onMounted(() => {
       quickSearchInput.value?.select();
     });
   });
+  
+  if (window.electronAPI?.startClipboardWatcher) {
+    window.electronAPI.startClipboardWatcher()
+  }
 });
 
 onUnmounted(() => {
