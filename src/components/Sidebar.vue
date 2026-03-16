@@ -19,7 +19,9 @@ import {
   LockClosedOutline, 
   CodeSlashOutline, 
   SettingsOutline,
-  ChatbubblesOutline
+  ChatbubblesOutline,
+  ClipboardOutline,
+  DocumentTextOutline
 } from '@vicons/ionicons5'
 
 const props = defineProps({
@@ -50,6 +52,16 @@ const menuOptions = [
     label: '代码片段',
     key: 'snippets',
     icon: renderIcon(CodeSlashOutline)
+  },
+  {
+    label: '剪贴板',
+    key: 'clipboard',
+    icon: renderIcon(ClipboardOutline)
+  },
+  {
+    label: '文档管理',
+    key: 'documents',
+    icon: renderIcon(DocumentTextOutline)
   },
   {
     label: 'AI 助手',

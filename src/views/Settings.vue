@@ -181,6 +181,62 @@
         </n-space>
       </n-card>
 
+      <n-card title="系统设置">
+        <template #header-extra>
+          <n-icon><SettingsOutline /></n-icon>
+        </template>
+        <n-space vertical>
+          <n-form :model="settings" label-placement="left" label-width="120">
+            <n-form-item label="开机自启动">
+              <n-switch v-model:value="settings.auto_launch" @update:value="handleAutoLaunchChange">
+                <template #checked>开启</template>
+                <template #unchecked>关闭</template>
+              </n-switch>
+              <n-text depth="3" style="margin-left: 8px; font-size: 12px;">
+                开机时自动启动应用
+              </n-text>
+            </n-form-item>
+          </n-form>
+        </n-space>
+      </n-card>
+
+      <n-card title="数据管理">
+        <template #header-extra>
+          <n-icon><CloudDownloadOutline /></n-icon>
+        </template>
+        <n-space vertical>
+          <n-text depth="3" style="margin-bottom: 16px;">
+            导出或导入应用数据，包含网站、密码、代码片段等所有数据
+          </n-text>
+          
+          <n-space>
+            <n-button @click="exportData" :loading="exporting">
+              <template #icon>
+                <n-icon><DownloadOutline /></n-icon>
+              </template>
+              导出数据
+            </n-button>
+            <n-button @click="triggerImport" :loading="importing">
+              <template #icon>
+                <n-icon><CloudUploadOutline /></n-icon>
+              </template>
+              导入数据
+            </n-button>
+            <input 
+              ref="fileInput" 
+              type="file" 
+              accept=".json" 
+              style="display: none" 
+              @change="handleFileSelect"
+            />
+          </n-space>
+          
+          <n-alert type="warning" style="margin-top: 12px;">
+            导入数据将覆盖现有数据，请先备份
+          </n-alert>
+        </n-space>
+      </n-card>
+
       <n-card title="关于">
         <template #header-extra>
           <n-icon><InformationCircleOutline /></n-icon>
@@ -221,7 +277,9 @@ import {
   NIcon,
   NDescriptions,
   NDescriptionsItem,
-  useMessage
+  NAlert,
+  useMessage,
+  useDialog
 } from 'naive-ui'
 import { 
   ChatbubbleEllipsesOutline, 
@@ -231,12 +289,20 @@ import {
   EyeOffOutline,
   ColorPaletteOutline,
   CheckmarkOutline,
-  KeypadOutline
+  KeypadOutline,
+  SettingsOutline,
+  CloudDownloadOutline,
+  DownloadOutline,
+  CloudUploadOutline
 } from '@vicons/ionicons5'
 import { settingsApi } from '../api/settings'
 import { useTheme } from '../store/theme'
+import { websiteApi } from '../api/website'
+import { passwordApi } from '../api/password'
+import { snippetApi } from '../api/snippet'
 
 const message = useMessage()
+const dialog = useDialog()
 const { currentTheme, setTheme } = useTheme()
 
 const settings = reactive({
@@ -246,11 +312,15 @@ const settings = reactive({
   ai_model: 'gpt-3.5-turbo',
   encryption_key: '',
   auto_lock: false,
+  auto_launch: false,
   global_shortcut: 'CommandOrControl+Shift+Space'
 })
 
 const showApiKey = ref(false)
 const testing = ref(false)
+const exporting = ref(false)
+const importing = ref(false)
+const fileInput = ref(null)
 
 const providerOptions = [
   { label: 'OpenAI', value: 'openai' },
@@ -374,6 +444,126 @@ const generateEncryptionKey = () => {
   }
   settings.encryption_key = key
   message.success('密钥已生成')
+}
+
+const handleAutoLaunchChange = async (value) => {
+  try {
+    if (window.electronAPI?.setAutoLaunch) {
+      await window.electronAPI.setAutoLaunch(value)
+    }
+    await settingsApi.set('auto_launch', value)
+    message.success(value ? '已开启开机自启动' : '已关闭开机自启动')
+  } catch (error) {
+    console.error('设置开机自启动失败:', error)
+    message.error('设置失败')
+    settings.auto_launch = !value
+  }
+}
+
+const exportData = async () => {
+  exporting.value = true
+  try {
+    const [websites, passwords, snippets, appSettings] = await Promise.all([
+      websiteApi.getAll(),
+      passwordApi.getAll(),
+      snippetApi.getAll(),
+      settingsApi.getAll()
+    ])
+    
+    const exportData = {
+      version: '1.0.0',
+      exportTime: new Date().toISOString(),
+      data: {
+        websites: websites.data.data || [],
+        passwords: passwords.data.data || [],
+        snippets: snippets.data.data || [],
+        settings: appSettings.data.data || {}
+      }
+    }
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `nexious-tools-backup-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    
+    message.success('数据导出成功')
+  } catch (error) {
+    console.error('导出失败:', error)
+    message.error('导出失败')
+  } finally {
+    exporting.value = false
+  }
+}
+
+const triggerImport = () => {
+  fileInput.value?.click()
+}
+
+const handleFileSelect = async (event) => {
+  const file = event.target.files?.[0]
+  if (!file) return
+  
+  importing.value = true
+  try {
+    const text = await file.text()
+    const importData = JSON.parse(text)
+    
+    if (!importData.version || !importData.data) {
+      message.error('无效的备份文件格式')
+      return
+    }
+    
+    dialog.warning({
+      title: '确认导入',
+      content: '导入数据将覆盖现有数据，是否继续？',
+      positiveText: '导入',
+      negativeText: '取消',
+      onPositiveClick: async () => {
+        try {
+          const { websites, passwords, snippets, settings: importedSettings } = importData.data
+          
+          if (websites?.length) {
+            for (const item of websites) {
+              await websiteApi.create(item)
+            }
+          }
+          
+          if (passwords?.length) {
+            for (const item of passwords) {
+              await passwordApi.create(item)
+            }
+          }
+          
+          if (snippets?.length) {
+            for (const item of snippets) {
+              await snippetApi.create(item)
+            }
+          }
+          
+          if (importedSettings) {
+            for (const [key, value] of Object.entries(importedSettings)) {
+              await settingsApi.set(key, value)
+            }
+          }
+          
+          message.success('数据导入成功')
+          loadSettings()
+        } catch (error) {
+          console.error('导入数据失败:', error)
+          message.error('导入失败')
+        }
+      }
+    })
+  } catch (error) {
+    console.error('读取文件失败:', error)
+    message.error('读取文件失败')
+  } finally {
+    importing.value = false
+    event.target.value = ''
+  }
 }
 
 onMounted(() => {

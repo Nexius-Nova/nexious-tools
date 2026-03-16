@@ -14,6 +14,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getExeIcon: (exePath) => ipcRenderer.invoke('get-exe-icon', exePath),
   setGlobalShortcut: (accelerator) => ipcRenderer.invoke('set-global-shortcut', accelerator),
   getGlobalShortcut: () => ipcRenderer.invoke('get-global-shortcut'),
+  setAutoLaunch: (enable) => ipcRenderer.invoke('set-auto-launch', enable),
+  getAutoLaunch: () => ipcRenderer.invoke('get-auto-launch'),
+  startClipboardWatcher: () => ipcRenderer.invoke('start-clipboard-watcher'),
+  stopClipboardWatcher: () => ipcRenderer.invoke('stop-clipboard-watcher'),
   onWindowRestored: (callback) => {
     ipcRenderer.on('window-restored', callback)
     return () => ipcRenderer.removeListener('window-restored', callback)
