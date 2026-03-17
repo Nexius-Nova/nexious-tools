@@ -15,7 +15,7 @@
       <n-input 
         ref="searchInput"
         v-model:value="searchQuery"
-        placeholder="搜索网站、密码、代码片段..."
+        placeholder="搜索网站、密码、代码片段、文档..."
         size="large"
         clearable
         @keydown.esc="showModal = false"
@@ -50,6 +50,7 @@
               round
             />
             <n-icon v-else-if="item.type === 'password'" size="20"><KeyOutline /></n-icon>
+            <n-icon v-else-if="item.type === 'document'" size="20"><DocumentOutline /></n-icon>
             <n-icon v-else size="20"><CodeSlashOutline /></n-icon>
           </div>
           <div class="result-info">
@@ -124,7 +125,7 @@
 import { ref, computed, onMounted, watch, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { NModal, NInput, NIcon, NTag, NDescriptions, NDescriptionsItem, NText, NButton, NSpace, NCode, NAvatar, useMessage } from 'naive-ui'
-import { SearchOutline, SettingsOutline, KeyOutline, CodeSlashOutline, EnterOutline } from '@vicons/ionicons5'
+import { SearchOutline, SettingsOutline, KeyOutline, CodeSlashOutline, EnterOutline, DocumentOutline } from '@vicons/ionicons5'
 import { passwordApi } from '../api/password'
 import { useTheme } from '../store/theme'
 import { useData } from '../store/data'
@@ -132,7 +133,7 @@ import { useData } from '../store/data'
 const router = useRouter()
 const emit = defineEmits(['close', 'select'])
 const { isDarkMode } = useTheme()
-const { websites, passwords, snippets, loadAllData } = useData()
+const { websites, passwords, snippets, documents, loadAllData } = useData()
 
 const message = useMessage()
 const showModal = ref(true)
@@ -232,6 +233,18 @@ const filteredResults = computed(() => {
     }
   })
   
+  documents.value.forEach(d => {
+    if (d.title?.toLowerCase().includes(searchPrefix) || d.content?.toLowerCase().includes(searchPrefix)) {
+      results.push({
+        ...d,
+        type: 'document',
+        typeLabel: '文档',
+        name: d.title || '无标题',
+        subtitle: d.word_count ? `${d.word_count} 字` : '文档'
+      })
+    }
+  })
+  
   return results.slice(0, 8)
 })
 
@@ -269,6 +282,10 @@ const selectItem = async (item) => {
     showModal.value = false
   } else if (item.type === 'snippet') {
     emit('select', { type: 'snippet', data: item })
+    emit('close')
+    showModal.value = false
+  } else if (item.type === 'document') {
+    router.push({ name: 'documents', query: { id: item.id } })
     emit('close')
     showModal.value = false
   }

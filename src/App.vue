@@ -88,7 +88,7 @@
                 <n-input
                   ref="quickSearchInput"
                   v-model:value="quickSearchQuery"
-                  placeholder="搜索网站、密码、代码片段..."
+                  placeholder="搜索网站、密码、代码片段、文档..."
                   size="large"
                   clearable
                   @keydown="handleQuickSearchKeydown"
@@ -143,6 +143,9 @@
                     <n-icon v-else-if="item.type === 'password'" size="20"
                       ><KeyOutline
                     /></n-icon>
+                    <n-icon v-else-if="item.type === 'document'" size="20"
+                      ><DocumentOutline
+                    /></n-icon>
                     <n-icon v-else size="20"><CodeSlashOutline /></n-icon>
                   </div>
                   <div class="result-info">
@@ -188,7 +191,8 @@ import {
   KeyOutline,
   CodeSlashOutline,
   EnterOutline,
-  ArrowBackOutline
+  ArrowBackOutline,
+  DocumentOutline
 } from "@vicons/ionicons5";
 import TitleBar from "./components/TitleBar.vue";
 import Sidebar from "./components/Sidebar.vue";
@@ -360,7 +364,7 @@ const handleQuickResultSelect = (item) => {
     showBackButton.value = true;
   } else if (item.type === "document") {
     showFullApp.value = true;
-    router.push("/documents");
+    router.push({ name: "documents", query: { id: item.id } });
     showBackButton.value = true;
   }
 };
@@ -461,6 +465,10 @@ const handleQuickSelect = (result) => {
   } else if (result.type === "settings") {
     showFullApp.value = true;
     router.push("/settings");
+    showBackButton.value = true;
+  } else if (result.type === "document") {
+    showFullApp.value = true;
+    router.push({ name: "documents", query: { id: result.data?.id } });
     showBackButton.value = true;
   }
   showQuickSearch.value = false;
