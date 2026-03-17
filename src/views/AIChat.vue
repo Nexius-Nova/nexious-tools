@@ -262,6 +262,34 @@
                 <n-empty v-if="filteredSnippets.length === 0" description="暂无代码片段" size="small" />
               </n-scrollbar>
             </n-tab-pane>
+            <n-tab-pane name="documents" tab="文档">
+              <n-input v-model:value="documentSearch" placeholder="搜索文档..." clearable style="margin-bottom: 12px;">
+                <template #prefix>
+                  <n-icon><SearchOutline /></n-icon>
+                </template>
+              </n-input>
+              <n-scrollbar style="max-height: 320px;">
+                <div class="reference-grid">
+                  <div 
+                    v-for="doc in filteredDocuments" 
+                    :key="doc.id" 
+                    class="reference-item"
+                    @click="addReference({ type: '文档', id: doc.id, name: doc.title || '无标题', data: doc })"
+                  >
+                    <div class="reference-icon document">
+                      <n-icon size="20"><DocumentOutline /></n-icon>
+                    </div>
+                    <div class="reference-info">
+                      <div class="reference-name">{{ doc.title || '无标题' }}</div>
+                      <div class="reference-desc">
+                        {{ doc.word_count ? `${doc.word_count} 字` : '文档' }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <n-empty v-if="filteredDocuments.length === 0" description="暂无文档" size="small" />
+              </n-scrollbar>
+            </n-tab-pane>
           </n-tabs>
         </div>
       </n-modal>
@@ -305,12 +333,14 @@ import {
   SearchOutline,
   KeyOutline,
   GlobeOutline,
-  CodeSlashOutline
+  CodeSlashOutline,
+  DocumentOutline
 } from '@vicons/ionicons5'
 import { aiMessageApi } from '../api/ai-message'
 import { websiteApi } from '../api/website'
 import { passwordApi } from '../api/password'
 import { snippetApi } from '../api/snippet'
+import { documentApi } from '../api/documents'
 import MessageContent from '../components/MessageContent.vue'
 
 const message = useMessage()
@@ -329,10 +359,12 @@ const currentConversationId = ref(null)
 const websites = ref([])
 const passwords = ref([])
 const snippets = ref([])
+const documents = ref([])
 
 const websiteSearch = ref('')
 const passwordSearch = ref('')
 const snippetSearch = ref('')
+const documentSearch = ref('')
 
 const filteredWebsites = computed(() => {
   if (!websiteSearch.value) return websites.value
@@ -362,11 +394,21 @@ const filteredSnippets = computed(() => {
   )
 })
 
+const filteredDocuments = computed(() => {
+  if (!documentSearch.value) return documents.value
+  const query = documentSearch.value.toLowerCase()
+  return documents.value.filter(d =>
+    d.title?.toLowerCase().includes(query) ||
+    d.content?.toLowerCase().includes(query)
+  )
+})
+
 const getRefTagType = (type) => {
   const types = {
     '网站': 'info',
     '密码': 'warning',
-    '代码': 'success'
+    '代码': 'success',
+    '文档': 'error'
   }
   return types[type] || 'default'
 }
@@ -406,14 +448,16 @@ const formatDateShort = (dateStr) => {
 
 const loadData = async () => {
   try {
-    const [webRes, pwdRes, snpRes] = await Promise.all([
+    const [webRes, pwdRes, snpRes, docRes] = await Promise.all([
       websiteApi.getAll(),
       passwordApi.getAll(),
-      snippetApi.getAll()
+      snippetApi.getAll(),
+      documentApi.getAll()
     ])
     websites.value = webRes.data.data || []
     passwords.value = pwdRes.data.data || []
     snippets.value = snpRes.data.data || []
+    documents.value = docRes.data.data || []
   } catch (error) {
     console.error('加载数据失败:', error)
   }
@@ -510,6 +554,8 @@ const buildReferenceContext = () => {
       context += `密码条目: ${ref.data.title || ref.data.website_name}\n账号: ${ref.data.username}\n网站: ${ref.data.website_url || '无'}\n\n`
     } else if (ref.type === '代码') {
       context += `代码片段: ${ref.data.title}\n语言: ${ref.data.language}\n代码:\n${ref.data.code}\n\n`
+    } else if (ref.type === '文档') {
+      context += `文档: ${ref.data.title || '无标题'}\n内容:\n${ref.data.content || '无内容'}\n\n`
     }
   })
   return context
@@ -651,6 +697,8 @@ const buildReferenceContextFromRefs = (refs) => {
         context += `密码条目: ${ref.data.title || ref.data.website_name}\n账号: ${ref.data.username}\n网站: ${ref.data.website_url || '无'}\n\n`
       } else if (ref.type === '代码') {
         context += `代码片段: ${ref.data.title}\n语言: ${ref.data.language}\n代码:\n${ref.data.code}\n\n`
+      } else if (ref.type === '文档') {
+        context += `文档: ${ref.data.title || '无标题'}\n内容: ${ref.data.content || '无内容'}\n\n`
       }
     }
   })
@@ -987,6 +1035,11 @@ onMounted(() => {
 .reference-icon.snippet {
   background: linear-gradient(135deg, rgba(82, 196, 26, 0.15) 0%, rgba(82, 196, 26, 0.05) 100%);
   color: #52c41a;
+}
+
+.reference-icon.document{
+  background: linear-gradient(135deg, rgba(114, 46, 209, 0.15) 0%, rgba(114, 46, 209, 0.05) 100%);
+  color: #722ed1;
 }
 
 .favicon-img {

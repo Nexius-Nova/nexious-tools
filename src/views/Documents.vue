@@ -123,6 +123,9 @@
             <div class="preview-title-row">
               <h1 class="preview-title">{{ currentDoc.title || '无标题' }}</h1>
               <n-space :size="8">
+                <n-button quaternary circle :type="showCatalog ? 'primary' : 'default'" @click="showCatalog = !showCatalog">
+                  <template #icon><n-icon size="18"><ListOutline /></n-icon></template>
+                </n-button>
                 <n-button quaternary circle @click="toggleFavorite">
                   <template #icon>
                     <n-icon :color="currentDoc.is_favorite ? '#faad14' : undefined" size="18">
@@ -160,14 +163,34 @@
               </div>
             </div>
           </div>
-          <div class="preview-content">
-            <MdPreview
-              :modelValue="currentDoc.content"
-              :theme="editorTheme"
-              :previewTheme="previewTheme"
-              :codeTheme="codeTheme"
-              class="md-preview"
-            />
+          <div class="preview-body">
+            <div class="catalog-sidebar" v-show="showCatalog">
+              <div class="catalog-header">
+                <span>目录</span>
+                <n-button quaternary circle size="tiny" @click="showCatalog = false">
+                  <template #icon><n-icon size="14"><ChevronDownOutline /></n-icon></template>
+                </n-button>
+              </div>
+              <div class="catalog-content">
+                <MdCatalog
+                  :editorId="previewId"
+                  :theme="editorTheme"
+                  scrollElement=".preview-content"
+                />
+              </div>
+            </div>
+            <div class="preview-main">
+              <div class="preview-content">
+                <MdPreview
+                  :id="previewId"
+                  :modelValue="currentDoc.content"
+                  :theme="editorTheme"
+                  :previewTheme="previewTheme"
+                  :codeTheme="codeTheme"
+                  class="md-preview"
+                />
+              </div>
+            </div>
           </div>
         </template>
 
@@ -253,6 +276,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   NH2, NSpace, NButton, NIcon, NInput, NText, NEmpty, NModal, NForm, NFormItem,
   NTreeSelect, NBadge, NSelect, useMessage, useDialog
@@ -261,9 +285,9 @@ import {
   FolderOutline, DocumentOutline, SearchOutline, Star, StarOutline,
   CreateOutline, TrashOutline, LinkOutline, ChevronDownOutline,
   SaveOutline, TextOutline, AddOutline, TimeOutline, AddCircleOutline,
-  ColorPaletteOutline, CodeSlashOutline
+  ColorPaletteOutline, CodeSlashOutline, ListOutline
 } from '@vicons/ionicons5'
-import { MdEditor, MdPreview } from 'md-editor-v3'
+import { MdEditor, MdPreview, MdCatalog } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { documentApi } from '../api/documents'
 import { docFolderApi } from '../api/doc-folders'
@@ -271,6 +295,7 @@ import FolderTreeNode from '../components/FolderTreeNode.vue'
 
 const message = useMessage()
 const dialog = useDialog()
+const route = useRoute()
 
 const documents = ref([])
 const folderTree = ref([])
@@ -293,6 +318,8 @@ const draggedDoc = ref(null)
 const editorTheme = ref('light')
 const previewTheme = ref(localStorage.getItem('md-preview-theme') || 'github')
 const codeTheme = ref(localStorage.getItem('md-code-theme') || 'github')
+const showCatalog = ref(true)
+const previewId = 'doc-preview'
 const editorToolbars = [
   'bold', 'underline', 'italic', 'strikeThrough',
   '-',
@@ -396,6 +423,13 @@ const loadDocuments = async () => {
   try {
     const res = await documentApi.getAll()
     documents.value = res.data.data || []
+    
+    if (route.query.id) {
+      const doc = documents.value.find(d => String(d.id) === String(route.query.id))
+      if (doc) {
+        selectDoc(doc)
+      }
+    }
   } catch (e) {
     console.error('加载文档失败:', e)
   }
@@ -1075,10 +1109,63 @@ onMounted(() => {
   text-decoration: underline;
 }
 
-.preview-content {
+.preview-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.catalog-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  background: var(--card-bg);
+}
+
+.catalog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  font-weight: 500;
+  font-size: 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.catalog-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.catalog-content :deep(.md-catalog) {
+  background: transparent;
+}
+
+.catalog-content :deep(.md-catalog-link) {
+  padding: 6px 16px;
+  font-size: 13px;
+}
+
+.catalog-content :deep(.md-catalog-link.active) {
+  background: var(--primary-light);
+  color: var(--primary-color);
+}
+
+.preview-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.preview-main .preview-content {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
+  position: relative;
 }
 
 .md-preview {

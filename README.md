@@ -1,6 +1,6 @@
 # Nexious Tools
 
-一款基于 Electron + Vue 3 的桌面端工具集，提供网站链接管理、密码管理、代码片段管理和 AI 智能助手功能。
+一款基于 Electron + Vue 3 的桌面端工具集，提供网站链接管理、密码管理、代码片段管理、文档管理和 AI 智能助手功能。
 
 ## 功能特性
 
@@ -26,6 +26,13 @@
 - 快速搜索
 - 一键复制
 
+### 文档管理
+- Markdown 编辑器
+- 文档目录导航
+- 文件夹分类管理
+- 拖拽移动文档
+- 主题切换
+
 ### AI 助手
 - 流式对话响应
 - 多轮对话记忆
@@ -35,7 +42,7 @@
 
 ### 快速搜索
 - 全局快捷键 `Ctrl+K` 唤起
-- 实时搜索网站、密码、代码片段
+- 实时搜索网站、密码、代码片段、文档
 - 深色/浅色主题切换
 - 失焦自动最小化
 
@@ -50,7 +57,7 @@
 | 构建工具 | Vite 5 |
 | 桌面框架 | Electron 29 |
 | 后端服务 | Express.js |
-| 数据库 | SQLite（默认）/ MySQL 8 |
+| 数据库 | SQLite |
 | 加密 | CryptoJS (AES-256) |
 
 ## 项目结构
@@ -66,12 +73,13 @@ nexious-tools/
 │   ├── db-config.js          # 数据库配置
 │   ├── db-sqlite.js          # SQLite 适配器
 │   ├── db-adapters/          # 数据库适配器
-│   │   ├── sqlite-adapter.js
-│   │   └── mysql-adapter.js
+│   │   └── sqlite-adapter.js
 │   └── routes/               # API 路由
 │       ├── websites.js       # 网站 API
 │       ├── passwords.js      # 密码 API
 │       ├── snippets.js       # 代码片段 API
+│       ├── documents.js      # 文档 API
+│       ├── doc-folders.js    # 文档文件夹 API
 │       ├── ai.js             # AI 对话 API
 │       ├── ai-messages.js    # AI 消息 API
 │       └── settings.js       # 设置 API
@@ -84,8 +92,7 @@ nexious-tools/
 │   ├── main.js               # 入口文件
 │   └── style.css             # 全局样式
 ├── database/                 # 数据库脚本
-│   ├── init.sql              # 初始化脚本
-│   └── test-data.sql         # 测试数据
+│   └── init.sql              # 初始化脚本
 ├── data/                     # 数据存储目录
 │   └── nexious_tools.db      # SQLite 数据库文件
 ├── package.json
@@ -103,39 +110,6 @@ nexious-tools/
 
 ```bash
 pnpm install
-```
-
-### 数据库配置
-
-项目默认使用 SQLite，无需额外配置，开箱即用。
-
-如需使用 MySQL：
-
-1. 创建数据库：
-
-```sql
-CREATE DATABASE nexious_tools CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-2. 导入表结构：
-
-```bash
-mysql -u root -p nexious_tools < database/init.sql
-```
-
-3. 修改 `server/db-config.js`：
-
-```javascript
-let dbType = 'mysql'  // 改为 mysql
-let dbConfig = {
-  mysql: {
-    host: 'localhost',
-    port: 3306,
-    user: 'your_username',
-    password: 'your_password',
-    database: 'nexious_tools'
-  }
-}
 ```
 
 ### 开发模式
@@ -227,6 +201,15 @@ pnpm make      # 生成安装包
 | PUT | /api/snippets/:id | 更新片段 |
 | DELETE | /api/snippets/:id | 删除片段 |
 | GET | /api/snippets/categories | 获取分类 |
+
+### 文档 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/documents | 获取所有文档 |
+| POST | /api/documents | 创建文档 |
+| PUT | /api/documents/:id | 更新文档 |
+| DELETE | /api/documents/:id | 删除文档 |
 
 ### AI API
 
