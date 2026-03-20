@@ -4,12 +4,26 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+let __dirname
+const metaUrl = import.meta.url
+if (metaUrl && metaUrl !== '') {
+  try {
+    const __filename = fileURLToPath(metaUrl)
+    __dirname = path.dirname(__filename)
+  } catch (e) {
+    __dirname = process.cwd()
+  }
+} else {
+  __dirname = process.cwd()
+}
+
+if (process.env.RESOURCES_PATH) {
+  __dirname = process.env.RESOURCES_PATH
+}
 
 const router = express.Router()
 
-const uploadsDir = path.join(__dirname, '../uploads')
+const uploadsDir = path.join(__dirname, 'uploads')
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true })

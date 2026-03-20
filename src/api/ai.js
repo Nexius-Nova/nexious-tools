@@ -6,5 +6,7 @@ const api = axios.create({
 
 export const aiApi = {
   chat: (data) => api.post('/ai/chat', data),
-  getContext: () => api.get('/ai/context')
+  getContext: () => api.get('/ai/context'),
+  formatDocument: (data) => api.post('/ai/format-document', data),
+  importUrl: (data) => api.post('/ai/import-url', data)
 }

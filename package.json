@@ -17,14 +17,18 @@
     "make": "electron-forge make"
   },
   "dependencies": {
+    "@guolao/vue-monaco-editor": "^1.6.0",
     "@vicons/ionicons5": "^0.13.0",
     "axios": "^1.6.7",
     "cors": "^2.8.5",
     "cross-env": "^10.1.0",
     "crypto-js": "^4.2.0",
+    "electron-squirrel-startup": "^1.0.1",
     "express": "^4.18.3",
+    "icon-extractor": "^1.0.3",
     "md-editor-v3": "^6.4.0",
     "multer": "^2.1.1",
+    "mysql2": "^3.9.2",
     "naive-ui": "^2.44.1",
     "pinia": "^2.1.7",
     "sql.js": "^1.14.1",
@@ -51,8 +55,8 @@
         "asar": true,
         "extraResource": [
           "./dist-server",
-          "./database",
-          "./data"
+          "./data",
+          "./node_modules/icon-extractor"
         ],
         "icon": "./electron/assets/logo",
         "ignore": [

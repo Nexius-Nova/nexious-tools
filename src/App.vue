@@ -98,6 +98,7 @@
                   <template #suffix>
                     <n-button
                       text
+                      @mousedown.prevent
                       @click="openSettingsFromQuickSearch"
                       class="settings-icon"
                     >
@@ -356,15 +357,15 @@ const handleQuickResultSelect = (item) => {
     window.electronAPI?.openApp(item.app_path);
   } else if (item.type === "password") {
     showFullApp.value = true;
-    router.push("/passwords");
+    router.push({ path: "/passwords", query: { id: item.id } });
     showBackButton.value = true;
   } else if (item.type === "snippet") {
     showFullApp.value = true;
-    router.push("/snippets");
+    router.push({ path: "/snippets", query: { id: item.id } });
     showBackButton.value = true;
   } else if (item.type === "document") {
     showFullApp.value = true;
-    router.push({ name: "documents", query: { id: item.id } });
+    router.push({ name: "Documents", query: { id: item.id } });
     showBackButton.value = true;
   }
 };
@@ -456,11 +457,11 @@ const handleQuickSelect = (result) => {
     window.electronAPI?.openApp(result.data.app_path);
   } else if (result.type === "password") {
     showFullApp.value = true;
-    router.push("/passwords");
+    router.push({ path: "/passwords", query: { id: result.data?.id } });
     showBackButton.value = true;
   } else if (result.type === "snippet") {
     showFullApp.value = true;
-    router.push("/snippets");
+    router.push({ path: "/snippets", query: { id: result.data?.id } });
     showBackButton.value = true;
   } else if (result.type === "settings") {
     showFullApp.value = true;
@@ -468,7 +469,7 @@ const handleQuickSelect = (result) => {
     showBackButton.value = true;
   } else if (result.type === "document") {
     showFullApp.value = true;
-    router.push({ name: "documents", query: { id: result.data?.id } });
+    router.push({ name: "Documents", query: { id: result.data?.id } });
     showBackButton.value = true;
   }
   showQuickSearch.value = false;

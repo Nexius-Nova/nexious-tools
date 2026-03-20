@@ -118,6 +118,21 @@ export async function initSqlite() {
   `)
   
   db.run(`
+    CREATE TABLE IF NOT EXISTS ai_models (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name VARCHAR(100) NOT NULL,
+      provider VARCHAR(50) NOT NULL,
+      api_key TEXT NOT NULL,
+      base_url VARCHAR(500),
+      model VARCHAR(100) NOT NULL,
+      is_enabled INTEGER DEFAULT 1,
+      is_default INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  
+  db.run(`
     CREATE TABLE IF NOT EXISTS clipboard_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       content TEXT NOT NULL,

@@ -49,7 +49,6 @@
             >
               <n-icon size="16"><FolderOutline /></n-icon>
               <span class="folder-name">全部文档</span>
-              <n-badge :value="documents.length" :max="99" type="info" />
               <div class="folder-actions" @click.stop>
                 <n-button text size="tiny" @click.stop="openFolderModal(null)">
                   <template #icon><n-icon size="14"><AddCircleOutline /></n-icon></template>
@@ -164,29 +163,22 @@
             </div>
           </div>
           <div class="preview-body">
-            <div class="catalog-sidebar" v-show="showCatalog">
-              <div class="catalog-header">
-                <span>目录</span>
-                <n-button quaternary circle size="tiny" @click="showCatalog = false">
-                  <template #icon><n-icon size="14"><ChevronDownOutline /></n-icon></template>
-                </n-button>
-              </div>
-              <div class="catalog-content">
-                <MdCatalog
-                  :editorId="previewId"
-                  :theme="editorTheme"
-                  scrollElement=".preview-content"
-                />
-              </div>
-            </div>
+            <CatalogSidebar
+              :content="currentDoc.content"
+              :scroll-container="previewScrollEl"
+              :editor-id="previewId"
+              :heading-id-generator="mdHeadingId"
+              v-show="showCatalog"
+            />
             <div class="preview-main">
-              <div class="preview-content">
+              <div class="preview-content" ref="previewScrollEl">
                 <MdPreview
                   :id="previewId"
                   :modelValue="currentDoc.content"
                   :theme="editorTheme"
                   :previewTheme="previewTheme"
                   :codeTheme="codeTheme"
+                  :mdHeadingId="mdHeadingId"
                   class="md-preview"
                 />
               </div>
@@ -204,6 +196,10 @@
                 class="title-input"
               />
               <n-space :size="8">
+                <n-button @click="formatDocument" :loading="formattingDoc" type="info">
+                  <template #icon><n-icon><SparklesOutline /></n-icon></template>
+                  AI整理
+                </n-button>
                 <n-button @click="cancelEdit">取消</n-button>
                 <n-button type="primary" @click="saveDoc" :loading="saving">
                   <template #icon><n-icon><SaveOutline /></n-icon></template>
@@ -220,6 +216,16 @@
                   size="small"
                   style="flex: 1"
                 />
+                <n-button 
+                  type="primary" 
+                  size="small" 
+                  @click="importFromUrl" 
+                  :loading="importingUrl"
+                  :disabled="!currentDoc.source_url"
+                >
+                  <template #icon><n-icon><CloudDownloadOutline /></n-icon></template>
+                  AI导入
+                </n-button>
               </div>
             </div>
           </div>
@@ -275,7 +281,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   NH2, NSpace, NButton, NIcon, NInput, NText, NEmpty, NModal, NForm, NFormItem,
@@ -285,13 +291,16 @@ import {
   FolderOutline, DocumentOutline, SearchOutline, Star, StarOutline,
   CreateOutline, TrashOutline, LinkOutline, ChevronDownOutline,
   SaveOutline, TextOutline, AddOutline, TimeOutline, AddCircleOutline,
-  ColorPaletteOutline, CodeSlashOutline, ListOutline
+  ColorPaletteOutline, CodeSlashOutline, ListOutline, SparklesOutline, CloudDownloadOutline,
+  ArrowUpOutline
 } from '@vicons/ionicons5'
-import { MdEditor, MdPreview, MdCatalog } from 'md-editor-v3'
+import { MdEditor, MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { documentApi } from '../api/documents'
 import { docFolderApi } from '../api/doc-folders'
+import { aiApi } from '../api/ai'
 import FolderTreeNode from '../components/FolderTreeNode.vue'
+import CatalogSidebar from '../components/CatalogSidebar.vue'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -312,14 +321,22 @@ const folderExpanded = ref(true)
 const expandedFolders = ref(new Set())
 const isEditMode = ref(false)
 const originalDoc = ref(null)
-const isRootDragOver = ref(false)
 const draggedDoc = ref(null)
+const isRootDragOver = ref(false)
 
 const editorTheme = ref('light')
 const previewTheme = ref(localStorage.getItem('md-preview-theme') || 'github')
 const codeTheme = ref(localStorage.getItem('md-code-theme') || 'github')
 const showCatalog = ref(true)
 const previewId = 'doc-preview'
+const formattingDoc = ref(false)
+const importingUrl = ref(false)
+const previewScrollEl = ref(null)
+
+const mdHeadingId = ({ text, level, index }) => {
+  return `heading-${index}-${level}-${text.replace(/\s+/g, '-').substring(0, 20)}`
+}
+
 const editorToolbars = [
   'bold', 'underline', 'italic', 'strikeThrough',
   '-',
@@ -333,7 +350,7 @@ const editorToolbars = [
   '-',
   'revoke', 'next',
   '=',
-  'preview', 'previewOnly', 'htmlPreview', 'catalog'
+  'pageFullscreen', 'fullscreen', 'preview', 'previewOnly'
 ]
 
 const previewThemeOptions = [
@@ -623,6 +640,149 @@ const toggleFavorite = async () => {
 
 const onContentChange = () => {
   currentDoc.value.word_count = currentDoc.value.content?.length || 0
+}
+
+const formatDocument = async () => {
+  if (!currentDoc.value?.content) {
+    message.warning('文档内容为空')
+    return
+  }
+  
+  formattingDoc.value = true
+  const originalContent = currentDoc.value.content
+  currentDoc.value.content = '正在整理中...\n'
+  
+  try {
+    const response = await fetch('http://localhost:3000/api/ai/format-document', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        content: originalContent,
+        title: currentDoc.value.title,
+        stream: true
+      })
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || '请求失败')
+    }
+    
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let result = ''
+    
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      
+      const chunk = decoder.decode(value, { stream: true })
+      const lines = chunk.split('\n').filter(line => line.trim() !== '')
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6))
+            if (data.error) {
+              throw new Error(data.error)
+            }
+            if (data.content) {
+              result += data.content
+              currentDoc.value.content = result
+            }
+          } catch (e) {
+            // ignore parse errors
+          }
+        }
+      }
+    }
+    
+    if (result) {
+      message.success('文档整理完成')
+    }
+  } catch (e) {
+    console.error('文档整理失败:', e)
+    currentDoc.value.content = originalContent
+    message.error(e.message || '文档整理失败')
+  } finally {
+    formattingDoc.value = false
+  }
+}
+
+const importFromUrl = async () => {
+  if (!currentDoc.value?.source_url) {
+    message.warning('请先输入网页URL')
+    return
+  }
+  
+  importingUrl.value = true
+  const originalContent = currentDoc.value.content || ''
+  currentDoc.value.content = '正在读取网页内容...\n'
+  
+  try {
+    const response = await fetch('http://localhost:3000/api/ai/import-url', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        url: currentDoc.value.source_url,
+        stream: true
+      })
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || '请求失败')
+    }
+    
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let result = ''
+    
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      
+      const chunk = decoder.decode(value, { stream: true })
+      const lines = chunk.split('\n').filter(line => line.trim() !== '')
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6))
+            if (data.error) {
+              throw new Error(data.error)
+            }
+            if (data.content) {
+              result += data.content
+              currentDoc.value.content = result
+            }
+          } catch (e) {
+            // ignore parse errors
+          }
+        }
+      }
+    }
+    
+    if (result) {
+      if (!currentDoc.value.title) {
+        const titleMatch = result.match(/^#\s+(.+)$/m)
+        if (titleMatch) {
+          currentDoc.value.title = titleMatch[1].trim()
+        }
+      }
+      message.success('网页内容导入完成')
+    }
+  } catch (e) {
+    console.error('导入网页失败:', e)
+    currentDoc.value.content = originalContent
+    message.error(e.message || '导入网页失败')
+  } finally {
+    importingUrl.value = false
+  }
 }
 
 const handleDragStart = (e, doc) => {
@@ -1115,50 +1275,12 @@ onMounted(() => {
   overflow: hidden;
 }
 
-.catalog-sidebar {
-  width: 220px;
-  flex-shrink: 0;
-  border-right: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  background: var(--card-bg);
-}
-
-.catalog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  font-weight: 500;
-  font-size: 14px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.catalog-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 0;
-}
-
-.catalog-content :deep(.md-catalog) {
-  background: transparent;
-}
-
-.catalog-content :deep(.md-catalog-link) {
-  padding: 6px 16px;
-  font-size: 13px;
-}
-
-.catalog-content :deep(.md-catalog-link.active) {
-  background: var(--primary-light);
-  color: var(--primary-color);
-}
-
 .preview-main {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 
 .preview-main .preview-content {
@@ -1262,6 +1384,39 @@ onMounted(() => {
 
 .empty-icon {
   margin-bottom: 16px;
+}
+
+.back-to-top-btn {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s;
+  z-index: 10;
+}
+
+.back-to-top-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 @media (max-width: 1024px) {

@@ -39,7 +39,7 @@
             <n-icon v-else size="20"><KeyOutline /></n-icon>
           </div>
           <div class="card-title">
-            <div class="title-text">{{ item.title || item.website_name || '未命名' }}</div>
+            <div class="title-text">{{ item.website_name || '未命名' }}</div>
             <div class="username">{{ item.username }}</div>
           </div>
         </div>
@@ -120,6 +120,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { 
   NButton, 
   NSpace, 
@@ -149,9 +150,10 @@ import { passwordApi } from '../api/password'
 import PasswordModal from '../components/PasswordModal.vue'
 import { useData } from '../store/data'
 
+const route = useRoute()
 const message = useMessage()
 const dialog = useDialog()
-const { passwords, websites, reloadPasswords, addPassword, updatePassword, removePassword } = useData()
+const { passwords, websites, reloadPasswords, reloadWebsites, addPassword, updatePassword, removePassword } = useData()
 
 const searchQuery = ref('')
 const showModal = ref(false)
@@ -164,7 +166,6 @@ const filteredPasswords = computed(() => {
   if (!searchQuery.value) return passwords.value
   const query = searchQuery.value.toLowerCase()
   return passwords.value.filter(p => 
-    p.title?.toLowerCase().includes(query) || 
     p.username?.toLowerCase().includes(query) ||
     p.website_name?.toLowerCase().includes(query)
   )
@@ -172,7 +173,7 @@ const filteredPasswords = computed(() => {
 
 const loadData = async () => {
   try {
-    await reloadPasswords()
+    await Promise.all([reloadPasswords(), reloadWebsites()])
   } catch (error) {
     console.error('加载数据失败:', error)
     message.error('加载数据失败')
@@ -218,7 +219,7 @@ const handleSave = async (data) => {
 const deletePassword = (item) => {
   dialog.warning({
     title: '确认删除',
-    content: `确定要删除 "${item.title || item.username}" 吗？`,
+    content: `确定要删除 "${item.website_name || item.username}" 吗？`,
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
@@ -281,8 +282,14 @@ const handleImageError = (e) => {
   e.target.style.display = 'none'
 }
 
-onMounted(() => {
-  loadData()
+onMounted(async () => {
+  await loadData()
+  if (route.query.id) {
+    const password = passwords.value.find(p => p.id === Number(route.query.id))
+    if (password) {
+      editPassword(password)
+    }
+  }
 })
 </script>
 

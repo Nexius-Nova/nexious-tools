@@ -45,13 +45,12 @@ router.get('/:id', async (req, res) => {
 })
 
 router.post('/', async (req, res) => {
-  const { title, website_name, website_url, website_favicon, username, password, notes } = req.body
+  const { website_name, website_url, website_favicon, username, password, notes } = req.body
   try {
     const key = await getEncryptionKey()
     const encryptedPassword = encryptPassword(password, key)
     
     const result = await insert('passwords', {
-      title: title || null,
       website_name: website_name || null,
       website_url: website_url || null,
       website_favicon: website_favicon || null,
@@ -59,20 +58,19 @@ router.post('/', async (req, res) => {
       password: encryptedPassword,
       notes: notes || null
     })
-    res.json({ data: { id: result.id, title, website_name, website_url, username, notes } })
+    res.json({ data: { id: result.id, website_name, website_url, username, notes } })
   } catch (error) {
     res.status(500).json({ error: error.message })
   }
 })
 
 router.put('/:id', async (req, res) => {
-  const { title, website_name, website_url, website_favicon, username, password, notes } = req.body
+  const { website_name, website_url, website_favicon, username, password, notes } = req.body
   try {
     const key = await getEncryptionKey()
     const encryptedPassword = encryptPassword(password, key)
     
     await update('passwords', req.params.id, {
-      title: title || null,
       website_name: website_name || null,
       website_url: website_url || null,
       website_favicon: website_favicon || null,
@@ -80,7 +78,7 @@ router.put('/:id', async (req, res) => {
       password: encryptedPassword,
       notes: notes || null
     })
-    res.json({ data: { id: req.params.id, title, website_name, website_url, username, notes } })
+    res.json({ data: { id: req.params.id, website_name, website_url, username, notes } })
   } catch (error) {
     res.status(500).json({ error: error.message })
   }

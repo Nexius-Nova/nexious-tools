@@ -20,10 +20,11 @@ await esbuild.build({
   format: 'cjs',
   outfile: path.join(outDir, 'server.cjs'),
   external: [
-    'better-sqlite3'
+    'mysql2',
+    'mysql2/promise'
   ],
   define: {
-    'import.meta.url': 'undefined'
+    'import.meta.url': '""'
   },
   inject: []
 })

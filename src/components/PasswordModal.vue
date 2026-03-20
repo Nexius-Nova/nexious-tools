@@ -6,15 +6,25 @@
     style="width: 500px;"
   >
     <n-form ref="formRef" :model="form" label-placement="left" label-width="80">
-      <n-form-item label="标题" path="title">
-        <n-input v-model:value="form.title" placeholder="密码条目标题" />
+      <n-form-item label="关联网站" path="website_id">
+        <n-select
+          v-model:value="form.website_id"
+          :options="websiteOptions"
+          placeholder="选择已有网站（可选）"
+          clearable
+          @update:value="handleWebsiteChange"
+        />
       </n-form-item>
 
-      <n-form-item label="网站名称" path="website_name">
-        <n-input v-model:value="form.website_name" placeholder="关联网站名称" />
+      <n-form-item label="网站名称" path="website_name" :rule="{ required: true, message: '请输入网站名称' }">
+        <n-input 
+          v-model:value="form.website_name" 
+          placeholder="网站名称"
+          :disabled="!!form.website_id"
+        />
       </n-form-item>
 
-      <n-form-item label="账号/用户名" path="username" :rule="{ required: true, message: '请输入账号' }">
+      <n-form-item label="账号" path="username" :rule="{ required: true, message: '请输入账号' }">
         <n-input v-model:value="form.username" placeholder="账号或用户名" />
       </n-form-item>
 
@@ -33,11 +43,22 @@
               </n-icon>
             </template>
           </n-button>
+          <n-button @click="generatePassword" title="生成随机密码">
+            <template #icon>
+              <n-icon>
+                <RefreshOutline />
+              </n-icon>
+            </template>
+          </n-button>
         </n-input-group>
       </n-form-item>
 
       <n-form-item label="网站URL" path="website_url">
-        <n-input v-model:value="form.website_url" placeholder="网站URL" />
+        <n-input 
+          v-model:value="form.website_url" 
+          placeholder="网站URL"
+          :disabled="!!form.website_id"
+        />
       </n-form-item>
 
       <n-form-item label="备注" path="notes">
@@ -60,7 +81,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, computed } from 'vue'
 import { 
   NModal, 
   NForm, 
@@ -70,11 +91,13 @@ import {
   NButton,
   NSpace,
   NIcon,
+  NSelect,
   useMessage
 } from 'naive-ui'
 import { 
   EyeOutline, 
-  EyeOffOutline 
+  EyeOffOutline,
+  RefreshOutline
 } from '@vicons/ionicons5'
 
 const props = defineProps({
@@ -100,12 +123,21 @@ const internalShow = ref(false)
 const showPassword = ref(false)
 
 const form = reactive({
-  title: '',
+  website_id: null,
   website_name: '',
+  website_url: '',
+  website_favicon: '',
   username: '',
   password: '',
-  website_url: '',
   notes: ''
+})
+
+const websiteOptions = computed(() => {
+  return props.websites.map(site => ({
+    label: site.name,
+    value: site.id,
+    ...site
+  }))
 })
 
 watch(() => props.show, (val) => {
@@ -120,12 +152,14 @@ watch(internalShow, (val) => {
 
 watch(() => props.password, (newVal) => {
   if (newVal) {
+    const matchedWebsite = props.websites.find(w => w.name === newVal.website_name)
     Object.assign(form, {
-      title: newVal.title || '',
+      website_id: matchedWebsite?.id || null,
       website_name: newVal.website_name || '',
+      website_url: newVal.website_url || '',
+      website_favicon: newVal.website_favicon || '',
       username: newVal.username || '',
       password: newVal.password || '',
-      website_url: newVal.website_url || '',
       notes: newVal.notes || ''
     })
   }
@@ -134,15 +168,42 @@ watch(() => props.password, (newVal) => {
 watch(() => props.show, (newVal) => {
   if (newVal && !props.password) {
     Object.assign(form, {
-      title: '',
+      website_id: null,
       website_name: '',
+      website_url: '',
+      website_favicon: '',
       username: '',
       password: '',
-      website_url: '',
       notes: ''
     })
   }
 })
+
+const handleWebsiteChange = (id) => {
+  if (id) {
+    const website = props.websites.find(w => w.id === id)
+    if (website) {
+      form.website_name = website.name || ''
+      form.website_url = website.url || ''
+      form.website_favicon = website.favicon || ''
+    }
+  } else {
+    form.website_name = ''
+    form.website_url = ''
+    form.website_favicon = ''
+  }
+}
+
+const generatePassword = () => {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*'
+  let result = ''
+  for (let i = 0; i < 16; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  form.password = result
+  showPassword.value = true
+  message.success('已生成随机密码')
+}
 
 const handleClose = () => {
   internalShow.value = false
@@ -151,7 +212,15 @@ const handleClose = () => {
 const handleSubmit = () => {
   formRef.value?.validate((errors) => {
     if (!errors) {
-      emit('save', { ...form })
+      const saveData = {
+        website_name: form.website_name,
+        website_url: form.website_url,
+        website_favicon: form.website_favicon,
+        username: form.username,
+        password: form.password,
+        notes: form.notes
+      }
+      emit('save', saveData)
       internalShow.value = false
     }
   })
