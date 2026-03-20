@@ -61,7 +61,6 @@
           >
             <n-icon size="16"><AppsOutline /></n-icon>
             <span>全部</span>
-            <n-badge :value="snippets.length" :max="99" type="info" />
           </div>
           <div
             v-for="category in categories"
@@ -91,7 +90,6 @@
             </template>
             <template v-else>
               <span>{{ category.name }}</span>
-              <n-badge :value="getCategoryCount(category.name)" :max="99" type="info" />
             </template>
             <n-button
               v-if="editingCategoryId !== category.id"
@@ -330,6 +328,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from "vue";
+import { useRoute } from "vue-router";
 import {
   NButton,
   NSpace,
@@ -366,6 +365,7 @@ import SnippetModal from "../components/SnippetModal.vue";
 import MonacoEditor from "../components/MonacoEditor.vue";
 import { useData } from "../store/data";
 
+const route = useRoute();
 const message = useMessage();
 const dialog = useDialog();
 const { snippets, reloadSnippets, addSnippet, updateSnippet, removeSnippet } = useData();
@@ -506,10 +506,10 @@ const loadData = async () => {
   await Promise.all([loadSnippets(), loadCategories()]);
 };
 
-const loadSnippets = async () => {
+const loadSnippets = async (skipAutoSelect = false) => {
   try {
     await reloadSnippets();
-    if (snippets.value.length > 0 && !selectedSnippet.value) {
+    if (snippets.value.length > 0 && !selectedSnippet.value && !skipAutoSelect) {
       selectedSnippet.value = snippets.value[0];
     }
   } catch (error) {
@@ -733,8 +733,15 @@ watch(filteredSnippets, (newVal) => {
   }
 });
 
-onMounted(() => {
-  loadData();
+onMounted(async () => {
+  const hasQueryId = !!route.query.id;
+  await loadData(hasQueryId);
+  if (route.query.id) {
+    const snippet = snippets.value.find(s => s.id === Number(route.query.id));
+    if (snippet) {
+      selectSnippet(snippet);
+    }
+  }
 });
 </script>
 

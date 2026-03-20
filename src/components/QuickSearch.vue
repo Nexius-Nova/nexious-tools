@@ -277,15 +277,15 @@ const selectItem = async (item) => {
     emit('close')
     showModal.value = false
   } else if (item.type === 'password') {
-    emit('select', { type: 'password', data: item })
+    router.push({ path: '/passwords', query: { id: item.id } })
     emit('close')
     showModal.value = false
   } else if (item.type === 'snippet') {
-    emit('select', { type: 'snippet', data: item })
+    router.push({ path: '/snippets', query: { id: item.id } })
     emit('close')
     showModal.value = false
   } else if (item.type === 'document') {
-    router.push({ name: 'documents', query: { id: item.id } })
+    router.push({ name: 'Documents', query: { id: item.id } })
     emit('close')
     showModal.value = false
   }

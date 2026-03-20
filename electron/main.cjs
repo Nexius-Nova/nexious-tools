@@ -1,9 +1,23 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, desktopCapturer, nativeImage, globalShortcut, clipboard } = require("electron")
+const { app, BrowserWindow, ipcMain, shell, dialog, globalShortcut, clipboard, screen } = require("electron")
 const path = require("path")
 const { spawn, exec } = require("child_process")
 const fs = require("fs")
 const os = require("os")
 const axios = require("axios")
+
+let iconExtractor
+try {
+  let iconExtractorPath
+  if (app.isPackaged) {
+    iconExtractorPath = path.join(process.resourcesPath, 'icon-extractor')
+  } else {
+    iconExtractorPath = 'icon-extractor'
+  }
+  iconExtractor = require(iconExtractorPath)
+} catch (e) {
+  console.error('Failed to load icon-extractor:', e.message)
+  iconExtractor = null
+}
 
 let mainWindow
 let serverProcess
@@ -180,6 +194,9 @@ ipcMain.on("expand-window", () => {
 
 ipcMain.on("shrink-window", () => {
   if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize()
+    }
     mainWindow.setAlwaysOnTop(true)
     mainWindow.setResizable(false)
     mainWindow.setMinimumSize(600, 60)
@@ -364,124 +381,123 @@ async function extractIconsBatch(apps) {
   return appsWithIcons
 }
 
+function extractIconWithExtractor(iconPath) {
+  return new Promise((resolve) => {
+    if (!iconExtractor) {
+      resolve(null)
+      return
+    }
+    
+    if (!iconPath || typeof iconPath !== "string") {
+      resolve(null)
+      return
+    }
+    
+    let cleanPath = iconPath.trim()
+    if (cleanPath.includes(",")) {
+      cleanPath = cleanPath.split(",")[0].trim()
+    }
+    cleanPath = cleanPath.replace(/^["']|["']$/g, "")
+    
+    if (!cleanPath || !fs.existsSync(cleanPath)) {
+      resolve(null)
+      return
+    }
+    
+    const timeout = setTimeout(() => {
+      resolve(null)
+    }, 3000)
+    
+    const handler = (data) => {
+      if (data.Context === cleanPath) {
+        clearTimeout(timeout)
+        iconExtractor.emitter.removeListener("icon", handler)
+        if (data.Base64ImageData) {
+          resolve(`data:image/png;base64,${data.Base64ImageData}`)
+        } else {
+          resolve(null)
+        }
+      }
+    }
+    
+    const errorHandler = (err) => {
+      clearTimeout(timeout)
+      iconExtractor.emitter.removeListener("error", errorHandler)
+      resolve(null)
+    }
+    
+    iconExtractor.emitter.on("icon", handler)
+    iconExtractor.emitter.on("error", errorHandler)
+    iconExtractor.getIcon(cleanPath, cleanPath)
+  })
+}
+
 ipcMain.handle("auto-import-apps", async () => {
   const apps = []
   const seenNames = new Set()
   
-  try {
-    const sources = await desktopCapturer.getSources({
-      types: ["window"],
-      fetchWindowIcons: true,
-      thumbnailSize: { width: 64, height: 64 }
-    })
-    
-    for (const source of sources) {
-      const name = source.name
-      if (!name || name === "Electron" || name === "nexious-tools") continue
-      if (seenNames.has(name)) continue
-      seenNames.add(name)
-      
-      apps.push({
-        name: name,
-        path: "",
-        icon: source.appIcon ? source.appIcon.toDataURL() : "",
-        type: "running"
-      })
-    }
-  } catch (e) {
-    console.error("获取运行中应用失败:", e.message)
-  }
-  
   if (process.platform === "win32") {
-    const installedApps = await getInstalledApps()
-    const appsWithIcons = await extractIconsBatch(installedApps)
-    
-    for (const app of appsWithIcons) {
-      if (!seenNames.has(app.name)) {
-        seenNames.add(app.name)
-        apps.push({
-          name: app.name,
-          path: app.path,
-          icon: app.icon,
-          type: "installed"
-        })
-      }
-    }
-  }
-  
-  return apps.slice(0, 100)
-})
-
-function getInstalledApps() {
-  return new Promise((resolve) => {
-    const apps = []
-    const seenApps = new Set()
-    
-    const cmd = `reg query "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall" /s & reg query "HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall" /s & reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall" /s`
-    
-    exec(cmd, { maxBuffer: 1024 * 1024 * 10, windowsHide: true }, (err, stdout) => {
-      if (!err && stdout) {
-        const lines = stdout.split(/\r?\n/)
-        let currentApp = {}
-        
-        for (const line of lines) {
-          const trimmed = line.trim()
-          
-          if (trimmed.match(/^DisplayName\s+REG_[A-Z]+\s+(.+)$/i)) {
-            currentApp.name = trimmed.replace(/^DisplayName\s+REG_[A-Z]+\s+/i, "").trim()
-          }
-          
-          if (trimmed.match(/^DisplayIcon\s+REG_[A-Z]+\s+(.+)$/i)) {
-            currentApp.iconPath = trimmed.replace(/^DisplayIcon\s+REG_[A-Z]+\s+/i, "").trim()
-          }
-          
-          if (trimmed.match(/^InstallLocation\s+REG_[A-Z]+\s+(.+)$/i)) {
-            currentApp.path = trimmed.replace(/^InstallLocation\s+REG_[A-Z]+\s+/i, "").trim()
-          }
-          
-          if (trimmed.match(/^UninstallString\s+REG_[A-Z]+\s+(.+)$/i)) {
-            const uninstallStr = trimmed.replace(/^UninstallString\s+REG_[A-Z]+\s+/i, "").trim()
-            if (!currentApp.path && uninstallStr) {
-              const exeMatch = uninstallStr.match(/"([^"]+\.exe)"/i) || uninstallStr.match(/([A-Z]:\\[^\s]+\.exe)/i)
-              if (exeMatch) {
-                currentApp.path = exeMatch[1]
-              }
-            }
-          }
-          
-          if (trimmed.startsWith("HKEY_") && currentApp.name) {
-            if (!seenApps.has(currentApp.name) && 
-                currentApp.name.length > 0 && 
-                !currentApp.name.includes("Update") &&
-                !currentApp.name.includes("Hotfix") &&
-                !currentApp.name.includes("Security") &&
-                !currentApp.name.includes("Microsoft Visual C++") &&
-                !currentApp.name.includes("Microsoft .NET")) {
-              seenApps.add(currentApp.name)
-              apps.push({
-                name: currentApp.name,
-                path: currentApp.path || "",
-                iconPath: currentApp.iconPath || "",
-                icon: ""
-              })
-            }
-            currentApp = {}
-          }
-        }
-        
-        if (currentApp.name && !seenApps.has(currentApp.name)) {
+    try {
+      const desktopApps = await getDesktopShortcuts()
+      
+      for (const app of desktopApps) {
+        if (!seenNames.has(app.name)) {
+          seenNames.add(app.name)
           apps.push({
-            name: currentApp.name,
-            path: currentApp.path || "",
-            iconPath: currentApp.iconPath || "",
-            icon: ""
+            name: app.name,
+            path: app.path,
+            icon: app.icon,
+            type: "desktop"
           })
         }
       }
+    } catch (e) {
+      console.error("获取桌面快捷方式失败:", e.message)
+    }
+  }
+  
+  return apps
+})
+
+async function getDesktopShortcuts() {
+  const shortcuts = []
+  const desktopDir = app.getPath("desktop")
+  
+  if (!fs.existsSync(desktopDir)) {
+    return shortcuts
+  }
+  
+  const files = fs.readdirSync(desktopDir)
+  
+  for (const file of files) {
+    if (!file.endsWith(".lnk")) continue
+    
+    const lnkPath = path.join(desktopDir, file)
+    
+    try {
+      const shortcutDetails = shell.readShortcutLink(lnkPath)
+      const realPath = shortcutDetails.target
       
-      resolve(apps)
-    })
-  })
+      if (!realPath || !fs.existsSync(realPath)) continue
+      
+      let iconBase64 = ""
+      try {
+        iconBase64 = await extractIconWithExtractor(realPath)
+      } catch (e) {
+        console.error("提取图标失败:", e.message)
+      }
+      
+      shortcuts.push({
+        name: file.replace(".lnk", ""),
+        path: realPath,
+        icon: iconBase64 || ""
+      })
+    } catch (e) {
+      console.error("解析快捷方式失败:", lnkPath, e.message)
+    }
+  }
+  
+  return shortcuts
 }
 
 ipcMain.handle("set-global-shortcut", (event, accelerator) => {

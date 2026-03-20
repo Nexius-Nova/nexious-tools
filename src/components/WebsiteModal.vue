@@ -18,11 +18,48 @@
       </n-form-item>
 
       <n-form-item v-if="form.type === 'app'" label="应用路径" path="app_path" :rule="appPathRule">
-        <n-input-group>
-          <n-input v-model:value="form.app_path" placeholder="选择桌面应用路径" style="flex: 1" />
-          <n-button @click="selectAppPath">选择应用</n-button>
-        </n-input-group>
+        <n-space vertical style="width: 100%">
+          <n-input-group>
+            <n-input v-model:value="form.app_path" placeholder="选择桌面应用路径" style="flex: 1" />
+            <n-button @click="selectAppPath">选择应用</n-button>
+            <n-button type="primary" @click="loadInstalledApps" :loading="loadingApps">
+              自动导入
+            </n-button>
+          </n-input-group>
+          <n-text depth="3" style="font-size: 12px">
+            点击"自动导入"可扫描已安装的桌面应用
+          </n-text>
+        </n-space>
       </n-form-item>
+
+      <n-modal v-model:show="showAppSelector" preset="card" title="选择应用" style="width: 700px; max-height: 80vh;">
+        <n-space vertical style="width: 100%">
+          <n-input v-model:value="appSearchKeyword" placeholder="搜索应用..." clearable>
+            <template #prefix>
+              <n-icon><SearchOutline /></n-icon>
+            </template>
+          </n-input>
+          <n-scrollbar style="max-height: 400px;">
+            <div class="app-grid">
+              <div 
+                v-for="app in filteredInstalledApps" 
+                :key="app.path || app.name"
+                class="app-item"
+                @click="selectInstalledApp(app)"
+              >
+                <div class="app-icon">
+                  <img v-if="app.icon" :src="app.icon" @error="(e) => e.target.style.display = 'none'" />
+                  <span v-else>{{ getFirstWord(app.name) }}</span>
+                </div>
+                <div class="app-info">
+                  <div class="app-name">{{ app.name }}</div>
+                  <div class="app-path" :title="app.path">{{ app.path ? truncatePath(app.path) : '运行中' }}</div>
+                </div>
+              </div>
+            </div>
+          </n-scrollbar>
+        </n-space>
+      </n-modal>
 
       <n-form-item label="名称" path="name" :rule="{ required: true, message: '请输入名称' }">
         <n-input v-model:value="form.name" placeholder="名称" />
@@ -131,9 +168,10 @@ import {
   NCollapse,
   NCollapseItem,
   NText,
+  NScrollbar,
   useMessage
 } from 'naive-ui'
-import { ImageOutline } from '@vicons/ionicons5'
+import { ImageOutline, SearchOutline } from '@vicons/ionicons5'
 import { websiteApi } from '../api/website'
 
 const props = defineProps({
@@ -156,6 +194,10 @@ const generating = ref(false)
 const generatingSearchUrl = ref(false)
 const iconInputRef = ref(null)
 const fetchingFavicon = ref(false)
+const showAppSelector = ref(false)
+const loadingApps = ref(false)
+const installedApps = ref([])
+const appSearchKeyword = ref('')
 
 const searchTemplates = [
   { name: '淘宝', alias: 'tb', url: 'https://s.taobao.com/search?q={query}' },
@@ -216,6 +258,15 @@ const appPathRule = computed(() => ({
   required: form.type === 'app',
   message: '请选择应用路径'
 }))
+
+const filteredInstalledApps = computed(() => {
+  if (!appSearchKeyword.value) return installedApps.value
+  const keyword = appSearchKeyword.value.toLowerCase()
+  return installedApps.value.filter(app => 
+    app.name?.toLowerCase().includes(keyword) ||
+    app.path?.toLowerCase().includes(keyword)
+  )
+})
 
 watch(() => props.website, (newVal) => {
   if (newVal) {
@@ -353,6 +404,44 @@ const selectAppPath = async () => {
   }
 }
 
+const loadInstalledApps = async () => {
+  loadingApps.value = true
+  try {
+    const apps = await window.electronAPI?.autoImportApps()
+    if (apps && apps.length > 0) {
+      installedApps.value = apps
+      showAppSelector.value = true
+    } else {
+      message.warning('未找到已安装的应用')
+    }
+  } catch (e) {
+    console.error('加载应用列表失败:', e)
+    message.error('加载应用列表失败')
+  } finally {
+    loadingApps.value = false
+  }
+}
+
+const selectInstalledApp = (app) => {
+  form.name = app.name
+  form.app_path = app.path
+  form.favicon = app.icon || ''
+  showAppSelector.value = false
+  message.success(`已选择 ${app.name}`)
+}
+
+const truncatePath = (path) => {
+  if (!path) return ''
+  if (path.length <= 50) return path
+  const fileName = path.split(/[/\\]/).pop()
+  if (fileName.length >= 45) return `...${fileName.slice(-45)}`
+  const parts = path.split(/[/\\]/)
+  if (parts.length > 3) {
+    return `${parts[0]}\\...\\${parts.slice(-2).join('\\')}`
+  }
+  return path
+}
+
 const triggerIconUpload = () => {
   iconInputRef.value?.click()
 }
@@ -462,6 +551,73 @@ const handleSubmit = () => {
 .template-alias {
   font-size: 11px;
   color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.app-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.app-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg-color);
+}
+
+.app-item:hover {
+  border-color: var(--primary-color, #667eea);
+  background: rgba(102, 126, 234, 0.08);
+}
+
+.app-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary-color, #667eea);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.app-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.app-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-path {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   margin-top: 2px;
 }
 </style>

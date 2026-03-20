@@ -1,6 +1,7 @@
 import express from 'express'
 import { query, queryOne, execute, insert, update, remove } from '../db.js'
 import axios from 'axios'
+import { getDefaultAiModel, getProviderConfig } from '../ai-utils.js'
 
 const router = express.Router()
 
@@ -143,18 +144,14 @@ router.get('/favicon', async (req, res) => {
 router.post('/generate-description', async (req, res) => {
   const { url } = req.body
   try {
-    const settings = await query(
-      "SELECT key, value FROM settings WHERE key IN ('ai_provider', 'ai_api_key', 'ai_base_url', 'ai_model')"
-    )
+    const aiModel = await getDefaultAiModel()
     
-    const config = {}
-    settings.forEach(s => {
-      config[s.key] = s.value
-    })
-
-    if (!config.ai_api_key) {
-      return res.status(400).json({ error: '请先在设置中配置API Key' })
+    if (!aiModel) {
+      return res.status(400).json({ error: '请先在设置中配置 AI 模型' })
     }
+    
+    const { provider, api_key, base_url, model } = aiModel
+    const config = getProviderConfig(provider, base_url, model)
 
     let websiteContent = ''
     try {
@@ -167,13 +164,10 @@ router.post('/generate-description', async (req, res) => {
       websiteContent = `网站URL: ${url}`
     }
 
-    const baseUrl = config.ai_base_url || 'https://api.openai.com/v1'
-    const model = config.ai_model || 'gpt-3.5-turbo'
-
     const aiResponse = await axios.post(
-      `${baseUrl}/chat/completions`,
+      config.url,
       {
-        model: model,
+        model: config.model,
         messages: [
           {
             role: 'system',
@@ -188,7 +182,7 @@ router.post('/generate-description', async (req, res) => {
       },
       {
         headers: {
-          'Authorization': `Bearer ${config.ai_api_key}`,
+          'Authorization': `Bearer ${api_key}`,
           'Content-Type': 'application/json'
         },
         timeout: 30000
@@ -206,18 +200,14 @@ router.post('/generate-description', async (req, res) => {
 router.post('/generate-search-url', async (req, res) => {
   const { url } = req.body
   try {
-    const settings = await query(
-      "SELECT key, value FROM settings WHERE key IN ('ai_provider', 'ai_api_key', 'ai_base_url', 'ai_model')"
-    )
+    const aiModel = await getDefaultAiModel()
     
-    const config = {}
-    settings.forEach(s => {
-      config[s.key] = s.value
-    })
-
-    if (!config.ai_api_key) {
-      return res.status(400).json({ error: '请先在设置中配置API Key' })
+    if (!aiModel) {
+      return res.status(400).json({ error: '请先在设置中配置 AI 模型' })
     }
+    
+    const { provider, api_key, base_url, model } = aiModel
+    const config = getProviderConfig(provider, base_url, model)
 
     let hostname
     try {
@@ -227,13 +217,10 @@ router.post('/generate-search-url', async (req, res) => {
       return res.status(400).json({ error: '请输入有效的网站URL' })
     }
 
-    const baseUrl = config.ai_base_url || 'https://api.openai.com/v1'
-    const model = config.ai_model || 'gpt-3.5-turbo'
-
     const aiResponse = await axios.post(
-      `${baseUrl}/chat/completions`,
+      config.url,
       {
-        model: model,
+        model: config.model,
         messages: [
           {
             role: 'system',
@@ -270,7 +257,7 @@ unknown-site.com -> {"search_url": "https://unknown-site.com/search?q={query}"}`
       },
       {
         headers: {
-          'Authorization': `Bearer ${config.ai_api_key}`,
+          'Authorization': `Bearer ${api_key}`,
           'Content-Type': 'application/json'
         },
         timeout: 30000
@@ -305,28 +292,21 @@ unknown-site.com -> {"search_url": "https://unknown-site.com/search?q={query}"}`
 router.post('/filter-apps', async (req, res) => {
   const { apps } = req.body
   try {
-    const settings = await query(
-      "SELECT key, value FROM settings WHERE key IN ('ai_provider', 'ai_api_key', 'ai_base_url', 'ai_model')"
-    )
+    const aiModel = await getDefaultAiModel()
     
-    const config = {}
-    settings.forEach(s => {
-      config[s.key] = s.value
-    })
-
-    if (!config.ai_api_key) {
+    if (!aiModel) {
       return res.json({ data: apps })
     }
-
-    const baseUrl = config.ai_base_url || 'https://api.openai.com/v1'
-    const model = config.ai_model || 'gpt-3.5-turbo'
+    
+    const { provider, api_key, base_url, model } = aiModel
+    const config = getProviderConfig(provider, base_url, model)
 
     const appNames = apps.map(a => a.name).join('\n')
     
     const aiResponse = await axios.post(
-      `${baseUrl}/chat/completions`,
+      config.url,
       {
-        model: model,
+        model: config.model,
         messages: [
           {
             role: 'system',
@@ -349,7 +329,7 @@ router.post('/filter-apps', async (req, res) => {
       },
       {
         headers: {
-          'Authorization': `Bearer ${config.ai_api_key}`,
+          'Authorization': `Bearer ${api_key}`,
           'Content-Type': 'application/json'
         },
         timeout: 30000

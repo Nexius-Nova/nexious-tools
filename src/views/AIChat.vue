@@ -52,12 +52,23 @@
           </div>
           <n-h2>AI 对话</n-h2>
         </div>
-        <n-button @click="showReferenceModal = true">
-          <template #icon>
-            <n-icon><LinkOutline /></n-icon>
-          </template>
-          引用数据
-        </n-button>
+        <n-space>
+          <n-dropdown :options="agentOptions" @select="handleAgentSelect">
+            <n-button>
+              <template #icon>
+                <n-icon><RocketOutline /></n-icon>
+              </template>
+              {{ currentAgent ? currentAgent.label : '选择智能体' }}
+              <n-icon size="14" style="margin-left: 4px;"><ChevronDownOutline /></n-icon>
+            </n-button>
+          </n-dropdown>
+          <n-button @click="showReferenceModal = true">
+            <template #icon>
+              <n-icon><LinkOutline /></n-icon>
+            </template>
+            引用数据
+          </n-button>
+        </n-space>
       </div>
 
       <div class="chat-container" ref="chatContainer">
@@ -131,6 +142,79 @@
               </n-text>
             </div>
           </div>
+
+          <div v-if="pendingData.type && !loading" class="inline-review">
+            <div class="inline-review-header">
+              <n-icon size="18"><RocketOutline /></n-icon>
+              <span class="inline-review-title">{{ currentAgent?.label || '智能体' }} 已生成数据</span>
+              <span class="inline-review-subtitle">请审核以下内容</span>
+            </div>
+            
+            <div v-if="pendingData.type === 'snippet'" class="inline-review-content">
+              <div class="review-field">
+                <span class="review-label">标题：</span>
+                <n-input v-model:value="pendingData.data.title" size="small" />
+              </div>
+              <div class="review-field">
+                <span class="review-label">语言：</span>
+                <n-select v-model:value="pendingData.data.language" :options="languageOptions" size="small" style="width: 150px;" />
+              </div>
+              <div class="review-field">
+                <span class="review-label">分类：</span>
+                <n-select v-model:value="pendingData.data.category" :options="categoryOptions" size="small" style="width: 150px;" placeholder="选择分类" />
+              </div>
+              <div class="review-field">
+                <span class="review-label">描述：</span>
+                <n-input v-model:value="pendingData.data.description" size="small" />
+              </div>
+              <div class="review-field">
+                <span class="review-label">代码：</span>
+                <n-input v-model:value="pendingData.data.code" type="textarea" :rows="6" size="small" />
+              </div>
+              <div class="review-actions">
+                <n-button size="small" @click="pendingData = { type: '', data: {} }">取消</n-button>
+                <n-button type="primary" size="small" @click="confirmAddData" :loading="addingData">确认添加</n-button>
+              </div>
+            </div>
+
+            <div v-else-if="pendingData.type === 'document'" class="inline-review-content">
+              <div class="review-field">
+                <span class="review-label">标题：</span>
+                <n-input v-model:value="pendingData.data.title" size="small" />
+              </div>
+              <div class="review-field">
+                <span class="review-label">内容：</span>
+                <n-input v-model:value="pendingData.data.content" type="textarea" :rows="8" size="small" />
+              </div>
+              <div class="review-actions">
+                <n-button size="small" @click="pendingData = { type: '', data: {} }">取消</n-button>
+                <n-button type="primary" size="small" @click="confirmAddData" :loading="addingData">确认添加</n-button>
+              </div>
+            </div>
+
+            <div v-else-if="pendingData.type === 'website'" class="inline-review-content">
+              <div class="review-field">
+                <span class="review-label">名称：</span>
+                <n-input v-model:value="pendingData.data.name" size="small" />
+              </div>
+              <div class="review-field">
+                <span class="review-label">URL：</span>
+                <n-input v-model:value="pendingData.data.url" size="small" />
+              </div>
+              <div class="review-field">
+                <span class="review-label">别名：</span>
+                <n-input v-model:value="pendingData.data.alias" size="small" />
+              </div>
+              <div class="review-field">
+                <span class="review-label">描述：</span>
+                <n-input v-model:value="pendingData.data.description" type="textarea" :rows="2" size="small" />
+              </div>
+              <div class="review-actions">
+                <n-button size="small" @click="pendingData = { type: '', data: {} }">取消</n-button>
+                <n-button type="primary" size="small" @click="confirmAddData" :loading="addingData">确认添加</n-button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -176,7 +260,7 @@
       <n-modal v-model:show="showReferenceModal" preset="card" title="引用数据" style="width: 700px;">
         <div class="reference-modal-content">
           <n-tabs v-model:value="activeTab" type="line" animated>
-            <n-tab-pane name="websites" tab="网站">
+            <n-tab-pane name="websites" tab="网站/应用">
               <n-input v-model:value="websiteSearch" placeholder="搜索网站..." clearable style="margin-bottom: 12px;">
                 <template #prefix>
                   <n-icon><SearchOutline /></n-icon>
@@ -298,7 +382,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted, h } from 'vue'
 import {
   NH2,
   NButton,
@@ -317,6 +401,12 @@ import {
   NThing,
   NEmpty,
   NScrollbar,
+  NDropdown,
+  NAlert,
+  NForm,
+  NFormItem,
+  NSelect,
+  NDynamicTags,
   useMessage
 } from 'naive-ui'
 import {
@@ -334,7 +424,10 @@ import {
   KeyOutline,
   GlobeOutline,
   CodeSlashOutline,
-  DocumentOutline
+  DocumentOutline,
+  RocketOutline,
+  ChevronDownOutline,
+  CheckmarkOutline
 } from '@vicons/ionicons5'
 import { aiMessageApi } from '../api/ai-message'
 import { websiteApi } from '../api/website'
@@ -342,6 +435,9 @@ import { passwordApi } from '../api/password'
 import { snippetApi } from '../api/snippet'
 import { documentApi } from '../api/documents'
 import MessageContent from '../components/MessageContent.vue'
+import { useData } from '../store/data'
+
+const { addSnippet, addDocument, addWebsite, reloadSnippets, reloadDocuments, reloadWebsites } = useData()
 
 const message = useMessage()
 const messages = ref([])
@@ -365,6 +461,59 @@ const websiteSearch = ref('')
 const passwordSearch = ref('')
 const snippetSearch = ref('')
 const documentSearch = ref('')
+
+const currentAgent = ref(null)
+const pendingData = ref({ type: '', data: {} })
+const addingData = ref(false)
+
+const categories = ref([])
+const folders = ref([])
+
+const languageOptions = [
+  { label: 'JavaScript', value: 'javascript' },
+  { label: 'TypeScript', value: 'typescript' },
+  { label: 'Python', value: 'python' },
+  { label: 'Java', value: 'java' },
+  { label: 'C++', value: 'cpp' },
+  { label: 'C#', value: 'csharp' },
+  { label: 'Go', value: 'go' },
+  { label: 'Rust', value: 'rust' },
+  { label: 'PHP', value: 'php' },
+  { label: 'Ruby', value: 'ruby' },
+  { label: 'Swift', value: 'swift' },
+  { label: 'Kotlin', value: 'kotlin' },
+  { label: 'SQL', value: 'sql' },
+  { label: 'HTML', value: 'html' },
+  { label: 'CSS', value: 'css' },
+  { label: 'Shell', value: 'shell' },
+  { label: 'Other', value: 'other' }
+]
+
+const categoryOptions = computed(() => {
+  return categories.value.map(c => ({ label: c.name, value: c.name }))
+})
+
+const folderOptions = computed(() => {
+  return folders.value.map(f => ({ label: f.name, value: f.id }))
+})
+
+const agentOptions = [
+  { 
+    label: '代码片段生成', 
+    key: 'snippet',
+    icon: () => h('span', '💻')
+  },
+  { 
+    label: '文档生成', 
+    key: 'document',
+    icon: () => h('span', '📄')
+  },
+  { 
+    label: '网站生成', 
+    key: 'website',
+    icon: () => h('span', '🌐')
+  }
+]
 
 const filteredWebsites = computed(() => {
   if (!websiteSearch.value) return websites.value
@@ -448,16 +597,22 @@ const formatDateShort = (dateStr) => {
 
 const loadData = async () => {
   try {
-    const [webRes, pwdRes, snpRes, docRes] = await Promise.all([
+    const [webRes, pwdRes, snpRes, docRes, catRes, folderRes] = await Promise.all([
       websiteApi.getAll(),
       passwordApi.getAll(),
       snippetApi.getAll(),
-      documentApi.getAll()
+      documentApi.getAll(),
+      snippetApi.getCategories(),
+      documentApi.getAll({ folders: true })
     ])
     websites.value = webRes.data.data || []
     passwords.value = pwdRes.data.data || []
     snippets.value = snpRes.data.data || []
     documents.value = docRes.data.data || []
+    categories.value = catRes.data.data || []
+    if (folderRes.data.folders) {
+      folders.value = folderRes.data.folders
+    }
   } catch (error) {
     console.error('加载数据失败:', error)
   }
@@ -602,6 +757,8 @@ const sendMessage = async () => {
   
   try {
     const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+    const systemPrompt = getAgentSystemPrompt()
+    
     const response = await fetch(`${apiBase}/ai/chat`, {
       method: 'POST',
       headers: {
@@ -613,7 +770,8 @@ const sendMessage = async () => {
           role: m.role,
           content: m.role === 'user' ? m.content + (m.references?.length ? buildReferenceContextFromRefs(m.references) : '') : m.content
         })),
-        stream: true
+        stream: true,
+        systemPrompt: systemPrompt || undefined
       })
     })
 
@@ -662,7 +820,18 @@ const sendMessage = async () => {
     if (!aiContent) {
       aiContent = '抱歉，我无法处理您的请求。'
     }
-
+    
+    if (currentAgent.value) {
+      const parsedData = parseAgentResponse(aiContent)
+      if (parsedData) {
+        pendingData.value = parsedData
+        const displayContent = formatAgentDisplayContent(parsedData.data, parsedData.type)
+        if (displayContent) {
+          aiContent = displayContent
+        }
+      }
+    }
+    
     messages.value.push({
       role: 'assistant',
       content: aiContent,
@@ -672,8 +841,8 @@ const sendMessage = async () => {
     await saveMessage('assistant', aiContent, aiReferences)
   } catch (error) {
     console.error('AI 对话失败:', error)
-    message.error(error.message || 'AI 对话失败，请检查设置')
-    const errorContent = '抱歉，发生了错误。请检查 AI 设置是否正确配置。'
+    message.error(error.message || 'AI对话失败，请检查设置')
+    const errorContent = '抱歉，发生了错误。请检查AI设置是否正确配置。'
     messages.value.push({
       role: 'assistant',
       content: errorContent
@@ -709,6 +878,236 @@ const handleKeydown = (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     sendMessage()
+  }
+}
+
+const handleAgentSelect = (key) => {
+  const agents = {
+    snippet: { key: 'snippet', label: '代码片段生成' },
+    document: { key: 'document', label: '文档生成' },
+    website: { key: 'website', label: '网站生成' }
+  }
+  currentAgent.value = agents[key]
+  message.info(`已切换到「${agents[key].label}」智能体`)
+}
+
+ const getAgentSystemPrompt = () => {
+  if (!currentAgent.value) return ''
+  
+  const prompts = {
+    snippet: `你是一个代码片段生成智能体。当用户请求生成代码时，你需要返回一个 JSON 格式的代码片段数据。
+返回格式必须是纯 JSON，不要包含任何其他文字说明：
+{
+  "title": "代码片段标题",
+  "language": "编程语言（如 javascript, python, typescript 等）",
+  "category": "分类名称",
+  "description": "代码片段描述",
+  "code": "代码内容",
+  "tags": ["标签1", "标签2"]
+}`,
+    document: `你是一个文档生成智能体。当用户请求生成文档时，你需要返回一个 JSON 格式的文档数据。
+返回格式必须是纯 JSON，不要包含任何其他文字说明：
+{
+  "title": "文档标题",
+  "content": "文档内容（支持 Markdown 格式）",
+  "tags": ["标签1", "标签2"]
+}`,
+    website: `你是一个网站生成智能体。当用户请求生成网站信息时，你需要返回一个 JSON 格式的网站数据。
+返回格式必须是纯 JSON，不要包含任何其他文字说明：
+{
+  "name": "网站名称",
+  "url": "网站地址",
+  "alias": "网站别名（可选）",
+  "description": "网站描述"
+}`
+  }
+  return prompts[currentAgent.value.key] || ''
+}
+
+const parseAgentResponse = (content) => {
+  if (!currentAgent.value) return null
+  
+  try {
+    let jsonStr = ''
+    let braceCount = 0
+    let startIndex = -1
+    let inString = false
+    let escapeNext = false
+    
+    for (let i = 0; i < content.length; i++) {
+      const char = content[i]
+      
+      if (escapeNext) {
+        escapeNext = false
+        continue
+      }
+      
+      if (char === '\\') {
+        escapeNext = true
+        continue
+      }
+      
+      if (char === '"') {
+        inString = !inString
+      }
+      
+      if (!inString) {
+        if (char === '{') {
+          if (braceCount === 0) {
+            startIndex = i
+          }
+          braceCount++
+        } else if (char === '}') {
+          braceCount--
+          if (braceCount === 0 && startIndex >= 0) {
+            jsonStr = content.substring(startIndex, i + 1)
+            break
+          }
+        }
+      }
+    }
+    
+    if (!jsonStr) return null
+    
+    try {
+      const data = JSON.parse(jsonStr)
+      
+      const cleanedData = { ...data }
+      for (const key in cleanedData) {
+        if (typeof cleanedData[key] === 'string') {
+          cleanedData[key] = cleanedData[key].trim()
+        }
+      }
+      
+      return {
+        type: currentAgent.value.key,
+        data: {
+          ...cleanedData,
+          tags: cleanedData.tags || []
+        }
+      }
+    } catch (parseError) {
+      jsonStr = jsonStr
+        .replace(/"(\w+)"\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*([,}])/g, '"$1": "$2"$3')
+        .replace(/"(\w+)"\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*([,}])/g, '"$1": "$2"$3')
+      
+      const data = JSON.parse(jsonStr)
+      
+      const cleanedData = { ...data }
+      for (const key in cleanedData) {
+        if (typeof cleanedData[key] === 'string') {
+          cleanedData[key] = cleanedData[key].trim()
+        }
+      }
+      
+      return {
+        type: currentAgent.value.key,
+        data: {
+          ...cleanedData,
+          tags: cleanedData.tags || []
+        }
+      }
+    }
+  } catch (e) {
+    console.error('解析智能体响应失败:', e)
+    return null
+  }
+}
+
+const formatAgentDisplayContent = (data, type) => {
+  let lines = []
+  
+  if (type === 'snippet') {
+    lines.push('**代码片段已生成**')
+    if (data.title) lines.push(`**标题：** ${data.title}`)
+    if (data.language) lines.push(`**语言：** ${data.language}`)
+    if (data.category) lines.push(`**分类：** ${data.category}`)
+    if (data.description) lines.push(`**描述：** ${data.description}`)
+    if (data.code) {
+      lines.push(`**代码：**`)
+      lines.push('```' + (data.language || 'javascript'))
+      lines.push(data.code)
+      lines.push('```')
+    }
+    if (data.tags && data.tags.length > 0) {
+      lines.push(`**标签：** ${data.tags.join(', ')}`)
+    }
+  } else if (type === 'document') {
+    lines.push('**文档已生成**')
+    if (data.title) lines.push(`**标题：** ${data.title}`)
+    if (data.content) {
+      lines.push(`**内容：**`)
+      lines.push(data.content)
+    }
+    if (data.tags && data.tags.length > 0) {
+      lines.push(`**标签：** ${data.tags.join(', ')}`)
+    }
+  } else if (type === 'website') {
+    lines.push('**网站信息已生成**')
+    if (data.name) lines.push(`**名称：** ${data.name}`)
+    if (data.url) lines.push(`**URL：** ${data.url}`)
+    if (data.alias) lines.push(`**别名：** ${data.alias}`)
+    if (data.description) lines.push(`**描述：** ${data.description}`)
+  }
+  
+  return lines.join('\n')
+}
+
+const confirmAddData = async () => {
+  addingData.value = true
+  try {
+    const { type, data } = pendingData.value
+    
+    if (type === 'snippet') {
+      const res = await snippetApi.create({
+        title: data.title,
+        language: data.language,
+        category: data.category,
+        description: data.description,
+        code: data.code,
+        tags: data.tags
+      })
+      if (res.data?.data) {
+        addSnippet(res.data.data)
+      } else {
+        await reloadSnippets()
+      }
+      message.success('代码片段添加成功')
+    } else if (type === 'document') {
+      const res = await documentApi.create({
+        title: data.title,
+        content: data.content,
+        folder_id: data.folder_id || null,
+        tags: data.tags
+      })
+      if (res.data?.data) {
+        addDocument(res.data.data)
+      } else {
+        await reloadDocuments()
+      }
+      message.success('文档添加成功')
+    } else if (type === 'website') {
+      const res = await websiteApi.create({
+        name: data.name,
+        url: data.url,
+        alias: data.alias || null,
+        description: data.description
+      })
+      if (res.data?.data) {
+        addWebsite(res.data.data)
+      } else {
+        await reloadWebsites()
+      }
+      message.success('网站添加成功')
+    }
+    
+    pendingData.value = { type: '', data: {} }
+    await loadData()
+  } catch (error) {
+    console.error('添加数据失败:', error)
+    message.error('添加数据失败')
+  } finally {
+    addingData.value = false
   }
 }
 
@@ -988,9 +1387,9 @@ onMounted(() => {
 
 .reference-grid {
   margin-top: 4px;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .reference-item {
@@ -1070,6 +1469,74 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.review-modal-content {
+  min-height: 300px;
+}
+
+.review-section {
+  margin-top: 8px;
+}
+
+.inline-review {
+  background: var(--card-bg);
+  border: 1px solid var(--primary-color);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.inline-review-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  color: var(--primary-color);
+}
+
+.inline-review-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.inline-review-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.inline-review-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.review-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.review-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  min-width: 50px;
+  flex-shrink: 0;
+}
+
+.review-field .n-input,
+.review-field .n-select {
+  flex: 1;
+}
+
+.review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
 }
 
 </style>

@@ -8,14 +8,29 @@ import passwordsRouter from './routes/passwords.js'
 import snippetsRouter from './routes/snippets.js'
 import settingsRouter from './routes/settings.js'
 import aiRouter from './routes/ai.js'
+import aiModelsRouter from './routes/ai-models.js'
 import aiMessagesRouter from './routes/ai-messages.js'
 import clipboardRouter from './routes/clipboard.js'
 import documentsRouter from './routes/documents.js'
 import docFoldersRouter from './routes/doc-folders.js'
 import uploadsRouter from './routes/uploads.js'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+let __dirname
+const metaUrl = import.meta.url
+if (metaUrl && metaUrl !== '') {
+  try {
+    const __filename = fileURLToPath(metaUrl)
+    __dirname = path.dirname(__filename)
+  } catch (e) {
+    __dirname = process.cwd()
+  }
+} else {
+  __dirname = process.cwd()
+}
+
+if (process.env.RESOURCES_PATH) {
+  __dirname = process.env.RESOURCES_PATH
+}
 
 const app = express()
 const PORT = 3000
@@ -31,6 +46,7 @@ app.use('/api/passwords', passwordsRouter)
 app.use('/api/snippets', snippetsRouter)
 app.use('/api/settings', settingsRouter)
 app.use('/api/ai', aiRouter)
+app.use('/api/ai-models', aiModelsRouter)
 app.use('/api/ai-messages', aiMessagesRouter)
 app.use('/api/clipboard', clipboardRouter)
 app.use('/api/documents', documentsRouter)
