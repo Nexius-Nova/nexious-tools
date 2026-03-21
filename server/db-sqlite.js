@@ -207,17 +207,21 @@ export async function initSqlite() {
 
   // ========== 添加唯一性约束迁移 ==========
 
-  // 检查并添加 websites 表唯一约束
+  // 检查并修复 websites 表约束（移除有问题的 type+url 唯一约束）
   try {
+    const tableInfo = query("PRAGMA table_info(websites)");
     const websitesIndexes = query("PRAGMA index_list(websites)");
-    const hasTypeNameIndex = websitesIndexes.some(
-      (idx) => idx.name === "idx_websites_type_name"
+    
+    const hasTypeNameConstraint = websitesIndexes.some(
+      (idx) => idx.name === "idx_websites_type_name" && idx.unique === 1
     );
-    const hasTypeUrlIndex = websitesIndexes.some(
-      (idx) => idx.name === "idx_websites_type_url"
+    const hasTypeUrlConstraint = websitesIndexes.some(
+      (idx) => idx.name === "idx_websites_type_url" && idx.unique === 1
     );
 
-    if (!hasTypeNameIndex || !hasTypeUrlIndex) {
+    if (hasTypeUrlConstraint || !hasTypeNameConstraint) {
+      console.log("正在修复 websites 表约束...");
+      
       db.run(`
         CREATE TABLE IF NOT EXISTS websites_new (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -231,8 +235,7 @@ export async function initSqlite() {
           search_url VARCHAR(500),
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT idx_websites_type_name UNIQUE(type, name),
-          CONSTRAINT idx_websites_type_url UNIQUE(type, url)
+          CONSTRAINT idx_websites_type_name UNIQUE(type, name)
         )
       `);
 
@@ -242,16 +245,17 @@ export async function initSqlite() {
         FROM websites 
         WHERE id IN (
           SELECT MIN(id) FROM websites GROUP BY type, name
-        ) AND id IN (
-          SELECT MIN(id) FROM websites GROUP BY type, url
         )
       `);
 
       db.run("DROP TABLE websites");
       db.run("ALTER TABLE websites_new RENAME TO websites");
+      
+      db.run(`CREATE INDEX IF NOT EXISTS idx_websites_type_url ON websites(type, url) WHERE url IS NOT NULL`);
+      console.log("websites 表约束修复完成");
     }
   } catch (e) {
-    console.log("添加 websites 唯一约束时出错:", e.message);
+    console.log("修复 websites 表约束时出错:", e.message);
   }
 
   // 检查并添加 passwords 表唯一约束
