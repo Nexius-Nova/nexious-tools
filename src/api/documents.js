@@ -13,5 +13,7 @@ export const documentApi = {
   
   delete: (id) => axios.delete(`${API_BASE}/${id}`),
   
-  search: (query) => axios.get(API_BASE, { params: { search: query } })
+  search: (query) => axios.get(API_BASE, { params: { search: query } }),
+  
+  clearAll: () => axios.delete(`${API_BASE}/clear/all`)
 }

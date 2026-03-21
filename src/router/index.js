@@ -11,7 +11,7 @@ const routes = [
     path: '/websites',
     name: 'Websites',
     component: () => import('../views/WebsiteManager.vue'),
-    meta: { title: '网站管理' }
+    meta: { title: '搜索管理' }
   },
   {
     path: '/passwords',

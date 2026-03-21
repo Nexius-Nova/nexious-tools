@@ -11,5 +11,7 @@ export const passwordApi = {
   
   delete: (id) => api.delete(`/passwords/${id}`),
   
-  decrypt: (id) => api.get(`/passwords/${id}/decrypt`)
+  decrypt: (id) => api.get(`/passwords/${id}/decrypt`),
+  
+  clearAll: () => api.delete('/passwords/clear/all')
 }

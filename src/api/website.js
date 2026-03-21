@@ -19,5 +19,7 @@ export const websiteApi = {
   
   getFavicon: (url) => api.get('/websites/favicon', { params: { url, _t: Date.now() } }),
   
-  filterApps: (apps) => api.post('/websites/filter-apps', { apps })
+  filterApps: (apps) => api.post('/websites/filter-apps', { apps }),
+  
+  clearAll: () => api.delete('/websites/clear/all')
 }

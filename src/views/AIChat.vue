@@ -759,63 +759,78 @@ const sendMessage = async () => {
     const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
     const systemPrompt = getAgentSystemPrompt()
     
-    const response = await fetch(`${apiBase}/ai/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        message: contextContent,
-        history: messages.value.slice(0, -1).map(m => ({
-          role: m.role,
-          content: m.role === 'user' ? m.content + (m.references?.length ? buildReferenceContextFromRefs(m.references) : '') : m.content
-        })),
-        stream: true,
-        systemPrompt: systemPrompt || undefined
-      })
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error || `请求失败 (${response.status})`)
-    }
-
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
     let aiContent = ''
     let aiReferences = []
+    let isTruncated = false
+    let continueFrom = null
+    
+    do {
+      const response = await fetch(`${apiBase}/ai/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: contextContent,
+          history: messages.value.slice(0, -1).map(m => ({
+            role: m.role,
+            content: m.role === 'user' ? m.content + (m.references?.length ? buildReferenceContextFromRefs(m.references) : '') : m.content
+          })),
+          stream: true,
+          systemPrompt: systemPrompt || undefined,
+          continueFrom: continueFrom
+        })
+      })
 
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `请求失败 (${response.status})`)
+      }
 
-      const chunk = decoder.decode(value, { stream: true })
-      const lines = chunk.split('\n').filter(line => line.trim() !== '')
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      isTruncated = false
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6)
-          try {
-            const parsed = JSON.parse(data)
-            if (parsed.content) {
-              aiContent += parsed.content
-              streamingContent.value = aiContent
-              scrollToBottom()
-            }
-            if (parsed.done) {
-              aiReferences = parsed.references || []
-            }
-            if (parsed.error) {
-              throw new Error(parsed.error)
-            }
-          } catch (e) {
-            if (e.message && !e.message.includes('JSON')) {
-              throw e
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n').filter(line => line.trim() !== '')
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            try {
+              const parsed = JSON.parse(data)
+              if (parsed.content) {
+                aiContent += parsed.content
+                streamingContent.value = aiContent
+                scrollToBottom()
+              }
+              if (parsed.done) {
+                aiReferences = parsed.references || []
+              }
+              if (parsed.truncated) {
+                isTruncated = true
+              }
+              if (parsed.error) {
+                throw new Error(parsed.error)
+              }
+            } catch (e) {
+              if (e.message && !e.message.includes('JSON')) {
+                throw e
+              }
             }
           }
         }
       }
-    }
+      
+      if (isTruncated && aiContent.length > 0) {
+        continueFrom = aiContent.slice(-2000)
+        streamingContent.value = aiContent + '\n\n**正在继续生成...**\n'
+      }
+    } while (isTruncated)
 
     if (!aiContent) {
       aiContent = '抱歉，我无法处理您的请求。'

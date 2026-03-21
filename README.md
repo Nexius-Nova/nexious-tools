@@ -50,7 +50,7 @@
 | 构建工具 | Vite 5 |
 | 桌面框架 | Electron 29 |
 | 后端服务 | Express.js |
-| 数据库 | SQLite（默认）/ MySQL 8 |
+| 数据库 | SQLite |
 | 加密 | CryptoJS (AES-256) |
 
 ## 项目结构
@@ -65,9 +65,6 @@ nexious-tools/
 │   ├── db.js                 # 数据库操作封装
 │   ├── db-config.js          # 数据库配置
 │   ├── db-sqlite.js          # SQLite 适配器
-│   ├── db-adapters/          # 数据库适配器
-│   │   ├── sqlite-adapter.js
-│   │   └── mysql-adapter.js
 │   └── routes/               # API 路由
 │       ├── websites.js       # 网站 API
 │       ├── passwords.js      # 密码 API
@@ -107,36 +104,7 @@ pnpm install
 
 ### 数据库配置
 
-项目默认使用 SQLite，无需额外配置，开箱即用。
-
-如需使用 MySQL：
-
-1. 创建数据库：
-
-```sql
-CREATE DATABASE nexious_tools CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-2. 导入表结构：
-
-```bash
-mysql -u root -p nexious_tools < database/init.sql
-```
-
-3. 修改 `server/db-config.js`：
-
-```javascript
-let dbType = 'mysql'  // 改为 mysql
-let dbConfig = {
-  mysql: {
-    host: 'localhost',
-    port: 3306,
-    user: 'your_username',
-    password: 'your_password',
-    database: 'nexious_tools'
-  }
-}
-```
+项目使用 SQLite，无需额外配置，开箱即用。
 
 ### 开发模式
 

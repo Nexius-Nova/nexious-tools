@@ -19,10 +19,7 @@ await esbuild.build({
   target: 'node18',
   format: 'cjs',
   outfile: path.join(outDir, 'server.cjs'),
-  external: [
-    'mysql2',
-    'mysql2/promise'
-  ],
+  external: [],
   define: {
     'import.meta.url': '""'
   },

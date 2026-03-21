@@ -2,19 +2,20 @@
   <n-modal 
     v-model:show="internalShow" 
     preset="card" 
-    :title="website?.id ? '编辑' + (website.type === 'app' ? '应用' : '网站') : '添加' + (form.type === 'app' ? '应用' : '网站')" 
+    :title="website?.id ? '编辑' + typeLabel : '添加' + typeLabel" 
     style="width: 600px;"
   >
     <n-form ref="formRef" :model="form" label-placement="left" label-width="80">
       <n-form-item label="类型" path="type">
         <n-radio-group v-model:value="form.type">
           <n-radio-button value="website">网站链接</n-radio-button>
+          <n-radio-button value="bookmark">网页收藏</n-radio-button>
           <n-radio-button value="app">桌面应用</n-radio-button>
         </n-radio-group>
       </n-form-item>
 
-      <n-form-item v-if="form.type === 'website'" label="网站URL" path="url" :rule="urlRule">
-        <n-input v-model:value="form.url" placeholder="https://example.com" @blur="autoFetchFavicon" />
+      <n-form-item v-if="form.type === 'website' || form.type === 'bookmark'" label="URL" path="url" :rule="urlRule">
+        <n-input v-model:value="form.url" :placeholder="form.type === 'bookmark' ? 'https://example.com' : 'https://example.com'" @blur="autoFetchFavicon" />
       </n-form-item>
 
       <n-form-item v-if="form.type === 'app'" label="应用路径" path="app_path" :rule="appPathRule">
@@ -115,7 +116,7 @@
                 </template>
                 上传
               </n-button>
-              <n-button v-if="form.type === 'website'" @click="fetchFavicon" :loading="fetchingFavicon">自动获取</n-button>
+              <n-button v-if="form.type === 'website' || form.type === 'bookmark'" @click="fetchFavicon" :loading="fetchingFavicon">自动获取</n-button>
             </n-input-group>
           </n-space>
           <input
@@ -250,8 +251,8 @@ const getFirstWord = (name) => {
 }
 
 const urlRule = computed(() => ({
-  required: form.type === 'website',
-  message: '请输入网站URL'
+  required: form.type === 'website' || form.type === 'bookmark',
+  message: '请输入URL'
 }))
 
 const appPathRule = computed(() => ({
@@ -266,6 +267,15 @@ const filteredInstalledApps = computed(() => {
     app.name?.toLowerCase().includes(keyword) ||
     app.path?.toLowerCase().includes(keyword)
   )
+})
+
+const typeLabel = computed(() => {
+  const labels = {
+    website: '网站',
+    bookmark: '书签',
+    app: '应用'
+  }
+  return labels[form.type] || '网站'
 })
 
 watch(() => props.website, (newVal) => {
@@ -546,12 +556,18 @@ const handleSubmit = () => {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .template-alias {
   font-size: 11px;
   color: var(--text-secondary);
   margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .app-grid {
@@ -601,6 +617,8 @@ const handleSubmit = () => {
 .app-info {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  max-width: calc(100% - 60px);
 }
 
 .app-name {
@@ -610,6 +628,7 @@ const handleSubmit = () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .app-path {
@@ -618,6 +637,7 @@ const handleSubmit = () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
   margin-top: 2px;
 }
 </style>

@@ -939,6 +939,15 @@ const handleFileSelect = async (event) => {
         try {
           const data = importPayload.data;
 
+          await Promise.all([
+            websiteApi.clearAll(),
+            passwordApi.clearAll(),
+            snippetApi.clearAll(),
+            documentApi.clearAll(),
+            clipboardApi.clearAll(),
+            aiModelsApi.clearAll()
+          ]);
+
           if (data.websites?.length) {
             for (const item of data.websites) {
               await websiteApi.create(item);

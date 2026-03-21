@@ -26,6 +26,28 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   const { name, url, alias, favicon, description, app_path, type, search_url } = req.body
   try {
+    const recordType = type || 'website'
+    
+    // 检查同一类别下 name 是否重复
+    const existingName = await queryOne(
+      'SELECT id FROM websites WHERE type = ? AND name = ?',
+      [recordType, name]
+    )
+    if (existingName) {
+      return res.status(400).json({ error: `该类别下已存在名称为"${name}"的记录` })
+    }
+    
+    // 检查同一类别下 url 是否重复（如果提供了 url）
+    if (url && url.trim()) {
+      const existingUrl = await queryOne(
+        'SELECT id FROM websites WHERE type = ? AND url = ?',
+        [recordType, url.trim()]
+      )
+      if (existingUrl) {
+        return res.status(400).json({ error: `该类别下已存在URL为"${url}"的记录` })
+      }
+    }
+    
     const result = await insert('websites', {
       name,
       url: url || null,
@@ -33,7 +55,7 @@ router.post('/', async (req, res) => {
       favicon: favicon || null,
       description: description || null,
       app_path: app_path || null,
-      type: type || 'website',
+      type: recordType,
       search_url: search_url || null
     })
     res.json({ data: result })
@@ -45,6 +67,28 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   const { name, url, alias, favicon, description, app_path, type, search_url } = req.body
   try {
+    const recordType = type || 'website'
+    
+    // 检查同一类别下 name 是否重复（排除当前记录）
+    const existingName = await queryOne(
+      'SELECT id FROM websites WHERE type = ? AND name = ? AND id != ?',
+      [recordType, name, req.params.id]
+    )
+    if (existingName) {
+      return res.status(400).json({ error: `该类别下已存在名称为"${name}"的记录` })
+    }
+    
+    // 检查同一类别下 url 是否重复（排除当前记录，如果提供了 url）
+    if (url && url.trim()) {
+      const existingUrl = await queryOne(
+        'SELECT id FROM websites WHERE type = ? AND url = ? AND id != ?',
+        [recordType, url.trim(), req.params.id]
+      )
+      if (existingUrl) {
+        return res.status(400).json({ error: `该类别下已存在URL为"${url}"的记录` })
+      }
+    }
+    
     await update('websites', req.params.id, {
       name,
       url: url || null,
@@ -52,10 +96,10 @@ router.put('/:id', async (req, res) => {
       favicon: favicon || null,
       description: description || null,
       app_path: app_path || null,
-      type: type || 'website',
+      type: recordType,
       search_url: search_url || null
     })
-    res.json({ data: { id: req.params.id, name, url, alias, favicon, description, app_path, type: type || 'website', search_url } })
+    res.json({ data: { id: req.params.id, name, url, alias, favicon, description, app_path, type: recordType, search_url } })
   } catch (error) {
     res.status(500).json({ error: error.message })
   }
@@ -352,6 +396,15 @@ router.post('/filter-apps', async (req, res) => {
   } catch (error) {
     console.error('筛选应用失败:', error.response?.data || error.message)
     res.json({ data: apps })
+  }
+})
+
+router.delete('/clear/all', async (req, res) => {
+  try {
+    await execute('DELETE FROM websites')
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
   }
 })
 

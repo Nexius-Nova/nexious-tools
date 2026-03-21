@@ -39,7 +39,7 @@ const renderIcon = (icon) => {
 
 const menuOptions = [
   {
-    label: '网站管理',
+    label: '搜索管理',
     key: 'websites',
     icon: renderIcon(GlobeOutline)
   },
