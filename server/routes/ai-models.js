@@ -33,6 +33,15 @@ router.post('/', async (req, res) => {
   }
   
   try {
+    // 检查 name 是否重复
+    const existing = await queryOne(
+      'SELECT id FROM ai_models WHERE name = ?',
+      [name]
+    )
+    if (existing) {
+      return res.status(400).json({ error: `已存在名称为"${name}"的AI模型配置` })
+    }
+    
     if (is_default === 1) {
       await execute('UPDATE ai_models SET is_default = 0')
     }
@@ -57,6 +66,16 @@ router.put('/:id', async (req, res) => {
     const existing = await queryOne('SELECT * FROM ai_models WHERE id = ?', [id])
     if (!existing) {
       return res.status(404).json({ error: '模型配置不存在' })
+    }
+    
+    // 检查 name 是否重复（排除当前记录）
+    const checkName = name ?? existing.name
+    const duplicateName = await queryOne(
+      'SELECT id FROM ai_models WHERE name = ? AND id != ?',
+      [checkName, id]
+    )
+    if (duplicateName) {
+      return res.status(400).json({ error: `已存在名称为"${checkName}"的AI模型配置` })
     }
     
     if (is_default === 1) {
@@ -200,6 +219,15 @@ router.post('/test', async (req, res) => {
     }
   } catch (error) {
     res.status(500).json({ success: false, message: error.message || '测试失败' })
+  }
+})
+
+router.delete('/clear/all', async (req, res) => {
+  try {
+    await execute('DELETE FROM ai_models')
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
   }
 })
 

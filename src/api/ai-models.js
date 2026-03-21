@@ -15,5 +15,7 @@ export const aiModelsApi = {
   
   toggle: (id) => api.post(`/ai-models/${id}/toggle`),
   
-  test: (data) => api.post('/ai-models/test', data)
+  test: (data) => api.post('/ai-models/test', data),
+  
+  clearAll: () => api.delete('/ai-models/clear/all')
 }

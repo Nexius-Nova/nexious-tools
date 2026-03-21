@@ -80,25 +80,4 @@ router.post('/test-api-key', async (req, res) => {
   }
 })
 
-router.post('/test-mysql', async (req, res) => {
-  const { host, port, user, password, database } = req.body
-  try {
-    const mysql = await import('mysql2/promise')
-    const connection = await mysql.createConnection({
-      host: host || 'localhost',
-      port: port || 3306,
-      user: user || 'root',
-      password: password || '',
-      database: database || 'nexious_tools'
-    })
-    
-    await connection.execute('SELECT 1')
-    await connection.end()
-    
-    res.json({ success: true, message: 'MySQL 连接成功' })
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message })
-  }
-})
-
 export default router

@@ -47,6 +47,17 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   const { website_name, website_url, website_favicon, username, password, notes } = req.body
   try {
+    // 检查 website_name + username 是否重复
+    if (website_name && username) {
+      const existing = await queryOne(
+        'SELECT id FROM passwords WHERE website_name = ? AND username = ?',
+        [website_name, username]
+      )
+      if (existing) {
+        return res.status(400).json({ error: `已存在网站"${website_name}"的用户名"${username}"记录` })
+      }
+    }
+    
     const key = await getEncryptionKey()
     const encryptedPassword = encryptPassword(password, key)
     
@@ -67,6 +78,17 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   const { website_name, website_url, website_favicon, username, password, notes } = req.body
   try {
+    // 检查 website_name + username 是否重复（排除当前记录）
+    if (website_name && username) {
+      const existing = await queryOne(
+        'SELECT id FROM passwords WHERE website_name = ? AND username = ? AND id != ?',
+        [website_name, username, req.params.id]
+      )
+      if (existing) {
+        return res.status(400).json({ error: `已存在网站"${website_name}"的用户名"${username}"记录` })
+      }
+    }
+    
     const key = await getEncryptionKey()
     const encryptedPassword = encryptPassword(password, key)
     
@@ -103,6 +125,15 @@ router.get('/:id/decrypt', async (req, res) => {
     const key = await getEncryptionKey()
     const decryptedPassword = decryptPassword(row.password, key)
     res.json({ data: { password: decryptedPassword } })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.delete('/clear/all', async (req, res) => {
+  try {
+    await execute('DELETE FROM passwords')
+    res.json({ success: true })
   } catch (error) {
     res.status(500).json({ error: error.message })
   }

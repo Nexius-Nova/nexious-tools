@@ -49,6 +49,12 @@
               :size="28"
               round
             />
+            <n-avatar
+              v-else-if="item.type === 'bookmark'"
+              :src="item.favicon"
+              :size="28"
+              round
+            />
             <n-icon v-else-if="item.type === 'password'" size="20"><KeyOutline /></n-icon>
             <n-icon v-else-if="item.type === 'document'" size="20"><DocumentOutline /></n-icon>
             <n-icon v-else size="20"><CodeSlashOutline /></n-icon>
@@ -147,6 +153,19 @@ const detailItem = ref(null)
 const decryptedPassword = ref('')
 const showPassword = ref(false)
 
+const truncateUrl = (url, maxLength = 40) => {
+  if (!url) return ''
+  try {
+    const urlObj = new URL(url)
+    const display = urlObj.hostname + urlObj.pathname
+    if (display.length <= maxLength) return display
+    return display.substring(0, maxLength) + '...'
+  } catch {
+    if (url.length <= maxLength) return url
+    return url.substring(0, maxLength) + '...'
+  }
+}
+
 const detailTitle = computed(() => {
   if (!detailItem.value) return ''
   if (detailItem.value.type === 'password') return '密码详情'
@@ -159,12 +178,12 @@ const filteredResults = computed(() => {
   const query = searchQuery.value.trim()
   
   if (!query) {
-    results.push(...websites.value.slice(0, 5).map(w => ({
+    results.push(...websites.value.filter(w => w.type !== 'app').slice(0, 5).map(w => ({
       ...w,
-      type: w.type === 'app' ? 'app' : 'website',
-      typeLabel: w.type === 'app' ? '应用' : '网站',
+      type: w.type === 'bookmark' ? 'bookmark' : 'website',
+      typeLabel: w.type === 'bookmark' ? '书签' : '网站',
       name: w.name,
-      subtitle: w.type === 'app' ? '应用程序' : (w.alias || w.url)
+      subtitle: w.type === 'bookmark' ? truncateUrl(w.url) : (w.alias || truncateUrl(w.url))
     })))
     return results.slice(0, 8)
   }
@@ -197,13 +216,23 @@ const filteredResults = computed(() => {
   const searchPrefix = spaceIndex > 0 ? query.substring(0, spaceIndex).toLowerCase() : query
   
   websites.value.forEach(w => {
-    if (w.name?.toLowerCase().includes(searchPrefix) || w.alias?.toLowerCase().includes(searchPrefix)) {
+    if (w.type === 'bookmark') {
+      if (w.name?.toLowerCase().includes(searchPrefix) || w.url?.toLowerCase().includes(searchPrefix)) {
+        results.push({
+          ...w,
+          type: 'bookmark',
+          typeLabel: '书签',
+          name: w.name,
+          subtitle: truncateUrl(w.url)
+        })
+      }
+    } else if (w.name?.toLowerCase().includes(searchPrefix) || w.alias?.toLowerCase().includes(searchPrefix)) {
       results.push({
         ...w,
         type: w.type === 'app' ? 'app' : 'website',
         typeLabel: w.type === 'app' ? '应用' : '网站',
         name: w.name,
-        subtitle: w.type === 'app' ? '本地应用' : (w.alias || w.url)
+        subtitle: w.type === 'app' ? '本地应用' : (w.alias || truncateUrl(w.url))
       })
     }
   })
@@ -267,6 +296,10 @@ const selectItem = async (item) => {
     emit('close')
     showModal.value = false
   } else if (item.type === 'website') {
+    window.electronAPI?.openExternal(item.url)
+    emit('close')
+    showModal.value = false
+  } else if (item.type === 'bookmark') {
     window.electronAPI?.openExternal(item.url)
     emit('close')
     showModal.value = false
@@ -439,6 +472,8 @@ onMounted(() => {
 .result-info {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  max-width: calc(100% - 100px);
 }
 
 .result-name {
@@ -448,6 +483,7 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .quick-search-content.dark-mode .result-name {
@@ -460,6 +496,7 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .quick-search-content.dark-mode .result-subtitle {

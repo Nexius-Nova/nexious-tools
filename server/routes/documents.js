@@ -56,12 +56,23 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: '标题不能为空' })
     }
     
+    // 检查同一文件夹下 title 是否重复
+    const recordFolderId = folder_id || null
+    const existing = await queryOne(
+      'SELECT id FROM documents WHERE folder_id IS ? AND title = ?',
+      [recordFolderId, title]
+    )
+    if (existing) {
+      const folderText = recordFolderId ? `文件夹ID ${recordFolderId}` : '根目录'
+      return res.status(400).json({ error: `${folderText}下已存在标题为"${title}"的文档` })
+    }
+    
     const wordCount = content ? content.length : 0
     const tagsJson = tags ? JSON.stringify(tags) : null
     
     const result = await execute(
       'INSERT INTO documents (title, content, content_type, folder_id, source_url, tags, word_count) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [title, content, content_type, folder_id || null, source_url || null, tagsJson, wordCount]
+      [title, content, content_type, recordFolderId, source_url || null, tagsJson, wordCount]
     )
     
     const newItem = await queryOne('SELECT * FROM documents WHERE id = ?', [result.lastInsertRowid])
@@ -75,6 +86,27 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { title, content, content_type, folder_id, source_url, tags, is_favorite } = req.body
+    
+    // 如果更新了 title 或 folder_id，检查唯一性
+    if (title !== undefined || folder_id !== undefined) {
+      // 获取当前记录
+      const current = await queryOne('SELECT title, folder_id FROM documents WHERE id = ?', [req.params.id])
+      if (!current) {
+        return res.status(404).json({ error: '文档不存在' })
+      }
+      
+      const checkTitle = title !== undefined ? title : current.title
+      const checkFolderId = folder_id !== undefined ? (folder_id || null) : current.folder_id
+      
+      const existing = await queryOne(
+        'SELECT id FROM documents WHERE folder_id IS ? AND title = ? AND id != ?',
+        [checkFolderId, checkTitle, req.params.id]
+      )
+      if (existing) {
+        const folderText = checkFolderId ? `文件夹ID ${checkFolderId}` : '根目录'
+        return res.status(400).json({ error: `${folderText}下已存在标题为"${checkTitle}"的文档` })
+      }
+    }
     
     const fields = []
     const values = []
@@ -133,6 +165,17 @@ router.delete('/:id', async (req, res) => {
   } catch (error) {
     console.error('删除文档失败:', error)
     res.status(500).json({ error: '删除失败' })
+  }
+})
+
+router.delete('/clear/all', async (req, res) => {
+  try {
+    await execute('DELETE FROM documents')
+    await execute('DELETE FROM doc_folders')
+    res.json({ success: true })
+  } catch (error) {
+    console.error('清空文档失败:', error)
+    res.status(500).json({ error: '清空失败' })
   }
 })
 

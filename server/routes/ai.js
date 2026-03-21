@@ -95,9 +95,9 @@ const fetchWithTimeout = async (url, options, timeout = 120000) => {
 }
 
 router.post('/chat', async (req, res) => {
-  const { message: userMessage, history = [], stream = false, systemPrompt: customSystemPrompt } = req.body
+  const { message: userMessage, history = [], stream = true, systemPrompt: customSystemPrompt, continueFrom = null } = req.body
   
-  if (!userMessage) {
+  if (!userMessage && !continueFrom) {
     return res.status(400).json({ error: '消息不能为空' })
   }
   
@@ -113,7 +113,7 @@ router.post('/chat', async (req, res) => {
     const contextData = await getContextData()
     const defaultSystemPrompt = buildSystemPrompt(contextData, aiModel)
     const systemPrompt = customSystemPrompt || defaultSystemPrompt
-    const references = findReferences(contextData, userMessage)
+    const references = findReferences(contextData, userMessage || '')
     
     const config = getProviderConfig(provider, base_url, model)
     
@@ -121,11 +121,27 @@ router.post('/chat', async (req, res) => {
       return res.status(400).json({ error: '请先在设置中配置 API Base URL' })
     }
     
-    const messages = [
-      { role: 'system', content: systemPrompt },
-      ...history.map(m => ({ role: m.role, content: m.content })),
-      { role: 'user', content: userMessage }
-    ]
+    let messages
+    if (continueFrom) {
+      messages = [
+        { role: 'system', content: systemPrompt },
+        ...history.map(m => ({ role: m.role, content: m.content })),
+        { role: 'user', content: `请继续输出以下内容的剩余部分（从上次中断的地方继续，不要重复已输出的内容）：
+
+上次已输出的内容：
+---
+${continueFrom}
+---
+
+请继续输出剩余内容：` }
+      ]
+    } else {
+      messages = [
+        { role: 'system', content: systemPrompt },
+        ...history.map(m => ({ role: m.role, content: m.content })),
+        { role: 'user', content: userMessage }
+      ]
+    }
     
     if (stream && config.type !== 'anthropic') {
       res.setHeader('Content-Type', 'text/event-stream')
@@ -141,7 +157,7 @@ router.post('/chat', async (req, res) => {
         body: JSON.stringify({
           model: config.model,
           messages: messages,
-          max_tokens: 2048,
+          max_tokens: 4096,
           stream: true
         })
       }, 300000)
@@ -176,6 +192,9 @@ router.post('/chat', async (req, res) => {
                   if (content) {
                     res.write(`data: ${JSON.stringify({ content })}\n\n`)
                   }
+                  if (parsed.choices?.[0]?.finish_reason === 'length') {
+                    res.write(`data: ${JSON.stringify({ truncated: true })}\n\n`)
+                  }
                 } catch (e) {
                   // ignore parse errors
                 }
@@ -203,7 +222,7 @@ router.post('/chat', async (req, res) => {
         },
         body: JSON.stringify({
           model: config.model,
-          max_tokens: 2048,
+          max_tokens: 4096,
           messages: messages.filter(m => m.role !== 'system').map(m => ({
             role: m.role,
             content: m.content
@@ -232,7 +251,7 @@ router.post('/chat', async (req, res) => {
         body: JSON.stringify({
           model: config.model,
           messages: messages,
-          max_tokens: 2048
+          max_tokens: 4096
         })
       })
       
@@ -468,7 +487,7 @@ ${content}`
 })
 
 router.post('/import-url', async (req, res) => {
-  const { url, stream = true } = req.body
+  const { url, stream = true, continueFrom = null } = req.body
   
   if (!url) {
     return res.status(400).json({ error: 'URL不能为空' })
@@ -492,141 +511,143 @@ router.post('/import-url', async (req, res) => {
     let webpageContent = ''
     let webpageTitle = ''
     
-    try {
-      const userAgents = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      ]
-      
-      let lastError = null
-      
-      for (let i = 0; i < userAgents.length; i++) {
-        try {
-          const headers = {
-            'User-Agent': userAgents[i],
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-            'Connection': 'keep-alive'
-          }
-          
-          if (i > 0) {
-            await new Promise(resolve => setTimeout(resolve, 500))
-          }
-          
-          const webpageRes = await fetchWithTimeout(url, {
-            method: 'GET',
-            headers,
-            redirect: 'follow'
-          }, 30000)
-          
-          if (webpageRes.ok) {
-            const html = await webpageRes.text()
+    if (!continueFrom) {
+      try {
+        const userAgents = [
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ]
+        
+        let lastError = null
+        
+        for (let i = 0; i < userAgents.length; i++) {
+          try {
+            const headers = {
+              'User-Agent': userAgents[i],
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+              'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache',
+              'Connection': 'keep-alive'
+            }
             
-            const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-            webpageTitle = titleMatch ? titleMatch[1].trim() : ''
+            if (i > 0) {
+              await new Promise(resolve => setTimeout(resolve, 500))
+            }
             
-            const imgMatches = html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)
-            const images = []
-            const baseUrl = url
+            const webpageRes = await fetchWithTimeout(url, {
+              method: 'GET',
+              headers,
+              redirect: 'follow'
+            }, 30000)
             
-            for (const match of imgMatches) {
-              let imgUrl = match[1]
-              if (imgUrl.startsWith('//')) {
-                imgUrl = 'https:' + imgUrl
-              } else if (imgUrl.startsWith('/')) {
-                try {
-                  const urlObj = new URL(baseUrl)
-                  imgUrl = `${urlObj.protocol}//${urlObj.host}${imgUrl}`
-                } catch (e) {
-                  continue
+            if (webpageRes.ok) {
+              const html = await webpageRes.text()
+              
+              const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+              webpageTitle = titleMatch ? titleMatch[1].trim() : ''
+              
+              const imgMatches = html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)
+              const images = []
+              const baseUrl = url
+              
+              for (const match of imgMatches) {
+                let imgUrl = match[1]
+                if (imgUrl.startsWith('//')) {
+                  imgUrl = 'https:' + imgUrl
+                } else if (imgUrl.startsWith('/')) {
+                  try {
+                    const urlObj = new URL(baseUrl)
+                    imgUrl = `${urlObj.protocol}//${urlObj.host}${imgUrl}`
+                  } catch (e) {
+                    continue
+                  }
+                } else if (!imgUrl.startsWith('http')) {
+                  try {
+                    imgUrl = new URL(imgUrl, baseUrl).href
+                  } catch (e) {
+                    continue
+                  }
                 }
-              } else if (!imgUrl.startsWith('http')) {
-                try {
-                  imgUrl = new URL(imgUrl, baseUrl).href
-                } catch (e) {
-                  continue
+                
+                if (!images.includes(imgUrl)) {
+                  images.push(imgUrl)
                 }
               }
               
-              if (!images.includes(imgUrl)) {
-                images.push(imgUrl)
-              }
-            }
-            
-            let text = html
-              .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-              .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-              .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
-              .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
-              .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
-              .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
-              .replace(/<form[^>]*>[\s\S]*?<\/form>/gi, '')
-              .replace(/<!--[\s\S]*?-->/g, '')
-            
-            const imgReplacements = []
-            let imgIndex = 0
-            text = text.replace(/<img[^>]+src=["']([^"']+)["'][^>]*alt=["']([^"']*)["'][^>]*>/gi, (match, src, alt) => {
-              imgIndex++
-              imgReplacements.push(`[图片${imgIndex}${alt ? `: ${alt}` : ''}]`)
-              return ` [图片${imgIndex}${alt ? `: ${alt}` : ''}] `
-            })
-            text = text.replace(/<img[^>]+alt=["']([^"']*)["'][^>]+src=["']([^"']+)["'][^>]*>/gi, (match, alt, src) => {
-              imgIndex++
-              imgReplacements.push(`[图片${imgIndex}${alt ? `: ${alt}` : ''}]`)
-              return ` [图片${imgIndex}${alt ? `: ${alt}` : ''}] `
-            })
-            text = text.replace(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi, (match, src) => {
-              imgIndex++
-              imgReplacements.push(`[图片${imgIndex}]`)
-              return ` [图片${imgIndex}] `
-            })
-            
-            text = text
-              .replace(/<[^>]+>/g, ' ')
-              .replace(/\s+/g, ' ')
-              .replace(/&nbsp;/g, ' ')
-              .replace(/&amp;/g, '&')
-              .replace(/&lt;/g, '<')
-              .replace(/&gt;/g, '>')
-              .replace(/&quot;/g, '"')
-              .replace(/&#39;/g, "'")
-              .trim()
-            
-            if (images.length > 0) {
-              text += '\n\n--- 网页图片 ---\n'
-              images.forEach((imgUrl, idx) => {
-                text += `图片${idx + 1}: ${imgUrl}\n`
+              let text = html
+                .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+                .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+                .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+                .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
+                .replace(/<form[^>]*>[\s\S]*?<\/form>/gi, '')
+                .replace(/<!--[\s\S]*?-->/g, '')
+              
+              const imgReplacements = []
+              let imgIndex = 0
+              text = text.replace(/<img[^>]+src=["']([^"']+)["'][^>]*alt=["']([^"']*)["'][^>]*>/gi, (match, src, alt) => {
+                imgIndex++
+                imgReplacements.push(`[图片${imgIndex}${alt ? `: ${alt}` : ''}]`)
+                return ` [图片${imgIndex}${alt ? `: ${alt}` : ''}] `
               })
+              text = text.replace(/<img[^>]+alt=["']([^"']*)["'][^>]+src=["']([^"']+)["'][^>]*>/gi, (match, alt, src) => {
+                imgIndex++
+                imgReplacements.push(`[图片${imgIndex}${alt ? `: ${alt}` : ''}]`)
+                return ` [图片${imgIndex}${alt ? `: ${alt}` : ''}] `
+              })
+              text = text.replace(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi, (match, src) => {
+                imgIndex++
+                imgReplacements.push(`[图片${imgIndex}]`)
+                return ` [图片${imgIndex}] `
+              })
+              
+              text = text
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .replace(/&nbsp;/g, ' ')
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"')
+                .replace(/&#39;/g, "'")
+                .trim()
+              
+              if (images.length > 0) {
+                text += '\n\n--- 网页图片 ---\n'
+                images.forEach((imgUrl, idx) => {
+                  text += `图片${idx + 1}: ${imgUrl}\n`
+                })
+              }
+              
+              const maxLen = 30000
+              if (text.length > maxLen) {
+                text = text.substring(0, maxLen) + '...(内容过长已截断)'
+              }
+              
+              webpageContent = text
+              break
+            } else {
+              lastError = new Error(`HTTP ${webpageRes.status}`)
             }
-            
-            const maxLen = 20000
-            if (text.length > maxLen) {
-              text = text.substring(0, maxLen) + '...(内容过长已截断)'
-            }
-            
-            webpageContent = text
-            break
-          } else {
-            lastError = new Error(`HTTP ${webpageRes.status}`)
+          } catch (e) {
+            lastError = e
           }
-        } catch (e) {
-          lastError = e
         }
+        
+        if (!webpageContent && lastError) {
+          throw new Error(`无法访问网页，该网站可能有反爬虫保护。建议：1. 尝试其他网站 2. 手动复制网页内容`)
+        }
+      } catch (fetchError) {
+        return res.status(400).json({ error: `无法获取网页内容: ${fetchError.message}` })
       }
       
-      if (!webpageContent && lastError) {
-        throw new Error(`无法访问网页，该网站可能有反爬虫保护。建议：1. 尝试其他网站 2. 手动复制网页内容`)
+      if (!webpageContent) {
+        return res.status(400).json({ error: '网页内容为空' })
       }
-    } catch (fetchError) {
-      return res.status(400).json({ error: `无法获取网页内容: ${fetchError.message}` })
-    }
-    
-    if (!webpageContent) {
-      return res.status(400).json({ error: '网页内容为空' })
     }
     
     const systemPrompt = `你是一个专业的内容整理助手。你的任务是将网页内容转换为格式规范的 Markdown 文档。
@@ -665,13 +686,26 @@ router.post('/import-url', async (req, res) => {
 
 8. **输出要求**：
    - 直接输出 Markdown 内容，不要添加任何解释说明
-   - 确保格式规范、可读性强`
+   - 确保格式规范、可读性强
+   - 如果内容很长，请完整输出所有内容，不要中途截断`
 
-    const userMessage = `请将以下网页内容转换为 Markdown 格式（100%保留原文内容，只修改格式）${webpageTitle ? `，网页标题：${webpageTitle}` : ''}：
+    let userMessage
+    if (continueFrom) {
+      userMessage = `请继续输出以下内容的剩余部分（从上次中断的地方继续，不要重复已输出的内容）：
+
+上次已输出的内容：
+---
+${continueFrom}
+---
+
+请继续输出剩余内容：`
+    } else {
+      userMessage = `请将以下网页内容转换为 Markdown 格式（100%保留原文内容，只修改格式）${webpageTitle ? `，网页标题：${webpageTitle}` : ''}：
 
 来源URL: ${url}
 
 ${webpageContent}`
+    }
 
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -692,10 +726,10 @@ ${webpageContent}`
         body: JSON.stringify({
           model: config.model,
           messages: messages,
-          max_tokens: 4096,
+          max_tokens: 8192,
           stream: true
         })
-      }, 300000)
+      }, 600000)
       
       if (!openaiRes.ok) {
         const errorData = await openaiRes.json().catch(() => ({}))
@@ -727,6 +761,9 @@ ${webpageContent}`
                   if (content) {
                     res.write(`data: ${JSON.stringify({ content })}\n\n`)
                   }
+                  if (parsed.choices?.[0]?.finish_reason === 'length') {
+                    res.write(`data: ${JSON.stringify({ truncated: true })}\n\n`)
+                  }
                 } catch (e) {
                   // ignore parse errors
                 }
@@ -754,7 +791,7 @@ ${webpageContent}`
         },
         body: JSON.stringify({
           model: config.model,
-          max_tokens: 4096,
+          max_tokens: 8192,
           messages: [{ role: 'user', content: userMessage }],
           system: systemPrompt
         })
@@ -777,7 +814,7 @@ ${webpageContent}`
         body: JSON.stringify({
           model: config.model,
           messages: messages,
-          max_tokens: 4096
+          max_tokens: 8192
         })
       })
       

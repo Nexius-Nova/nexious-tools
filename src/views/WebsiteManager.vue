@@ -29,6 +29,12 @@
           </template>
           导入桌面应用
         </n-button>
+        <n-button @click="importBookmarks" :loading="importingBookmarks">
+          <template #icon>
+            <n-icon><BookmarkOutline /></n-icon>
+          </template>
+          导入浏览器书签
+        </n-button>
         <n-button type="primary" @click="openAddModal">
           <template #icon>
             <n-icon><AddOutline /></n-icon>
@@ -53,6 +59,7 @@
       <n-tab-pane name="all" tab="全部" />
       <n-tab-pane name="website" tab="网站链接" />
       <n-tab-pane name="app" tab="桌面应用" />
+      <n-tab-pane name="bookmark" tab="网页收藏" />
     </n-tabs>
 
     <n-grid
@@ -73,17 +80,40 @@
                   class="card-icon"
                   @error="handleCardIconError($event, item)"
                 />
-                <div 
-                  v-if="!item?.favicon || item._iconError" 
+                <div
+                  v-if="!item?.favicon || item._iconError"
                   class="card-icon-placeholder"
                   :style="{ background: getIconGradient(item.name) }"
                 >
                   {{ getFirstWord(item.name) }}
                 </div>
               </div>
-              <n-space vertical :size="0">
-                <n-text strong>{{ item.name }}</n-text>
-                <n-text v-if="item.alias" depth="3" style="font-size: 12px">
+              <n-space
+                vertical
+                :size="0"
+                style="overflow: hidden; flex: 1; min-width: 0"
+              >
+                <n-text
+                  strong
+                  style="
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    display: block;
+                  "
+                  >{{ item.name }}</n-text
+                >
+                <n-text
+                  v-if="item.alias"
+                  depth="3"
+                  style="
+                    font-size: 12px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    display: block;
+                  "
+                >
                   {{ item.alias }}
                 </n-text>
               </n-space>
@@ -102,10 +132,10 @@
                 </template>
               </n-button>
               <n-button
-                v-if="item.type === 'website'"
+                v-if="item.type === 'website' || item.type === 'bookmark'"
                 text
                 @click="openWebsite(item)"
-                title="打开网站"
+                title="打开网页"
               >
                 <template #icon>
                   <n-icon><OpenOutline /></n-icon>
@@ -141,10 +171,22 @@
                 }}
               </n-text>
               <n-tag
-                :type="item.type === 'app' ? 'info' : 'success'"
+                :type="
+                  item.type === 'app'
+                    ? 'info'
+                    : item.type === 'bookmark'
+                      ? 'warning'
+                      : 'success'
+                "
                 size="small"
               >
-                {{ item.type === "app" ? "应用" : "网站" }}
+                {{
+                  item.type === "app"
+                    ? "应用"
+                    : item.type === "bookmark"
+                      ? "书签"
+                      : "网站"
+                }}
               </n-tag>
             </n-space>
           </template>
@@ -196,7 +238,9 @@
             AI筛选
           </n-button>
           <n-button secondary size="small" @click="selectAll">全选</n-button>
-          <n-button secondary size="small" @click="deselectAll">取消全选</n-button>
+          <n-button secondary size="small" @click="deselectAll"
+            >取消全选</n-button
+          >
         </n-space>
       </template>
 
@@ -257,7 +301,13 @@
                   {{ app.name }}
                 </n-ellipsis>
                 <n-ellipsis class="app-card-path" :line-clamp="1">
-                  {{ app.path ? truncatePath(app.path) : app.type === "running" ? "运行中" : "已安装" }}
+                  {{
+                    app.path
+                      ? truncatePath(app.path)
+                      : app.type === "running"
+                        ? "运行中"
+                        : "已安装"
+                  }}
                 </n-ellipsis>
               </div>
               <div v-if="isAppSelected(app)" class="app-card-badge">
@@ -276,7 +326,9 @@
       <template #footer>
         <n-space justify="space-between" align="center">
           <n-text depth="3" style="font-size: 13px">
-            <n-icon size="16" style="vertical-align: -2px; margin-right: 4px"><InformationCircleOutline /></n-icon>
+            <n-icon size="16" style="vertical-align: -2px; margin-right: 4px"
+              ><InformationCircleOutline
+            /></n-icon>
             点击应用卡片或复选框进行选择
           </n-text>
           <n-space :size="12">
@@ -291,6 +343,139 @@
                 <n-icon><CloudDownloadOutline /></n-icon>
               </template>
               导入选中 ({{ selectedApps.length }})
+            </n-button>
+          </n-space>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <n-modal
+      v-model:show="showBookmarkModal"
+      preset="card"
+      title="导入浏览器书签"
+      style="width: 960px"
+      :segmented="{ content: true, footer: true }"
+      size="huge"
+    >
+      <template #header-extra>
+        <n-space :size="8">
+          <n-button secondary size="small" @click="selectAllBookmarks"
+            >全选</n-button
+          >
+          <n-button secondary size="small" @click="deselectAllBookmarks"
+            >取消全选</n-button
+          >
+        </n-space>
+      </template>
+
+      <div class="import-modal-content">
+        <div class="import-header">
+          <div class="import-stats">
+            <n-tag :bordered="false" type="info" size="medium">
+              找到 {{ scannedBookmarks.length }} 个书签
+            </n-tag>
+            <n-tag :bordered="false" type="success" size="medium">
+              已选择 {{ selectedBookmarks.length }} 个
+            </n-tag>
+          </div>
+          <n-input
+            v-model:value="bookmarkSearchQuery"
+            placeholder="搜索书签名称或URL..."
+            clearable
+            size="medium"
+            style="width: 300px"
+          >
+            <template #prefix>
+              <n-icon><SearchOutline /></n-icon>
+            </template>
+          </n-input>
+        </div>
+
+        <n-divider style="margin: 12px 0" />
+
+        <n-scrollbar style="max-height: 480px">
+          <div class="bookmark-grid">
+            <div
+              v-for="bookmark in filteredScannedBookmarks"
+              :key="bookmark.url"
+              class="bookmark-card"
+              :class="{ selected: isBookmarkSelected(bookmark) }"
+              @click="toggleBookmarkSelection(bookmark)"
+            >
+              <div class="bookmark-card-checkbox">
+                <n-checkbox
+                  :checked="isBookmarkSelected(bookmark)"
+                  @update:checked="toggleBookmarkSelection(bookmark)"
+                  @click.stop
+                />
+              </div>
+              <div class="bookmark-card-icon">
+                <img
+                  v-if="bookmark.icon && !bookmark._iconError"
+                  :src="bookmark.icon"
+                  class="bookmark-icon-img"
+                  @error="bookmark._iconError = true"
+                />
+                <div
+                  v-else
+                  class="bookmark-icon-placeholder"
+                  :style="{ background: getIconGradient(bookmark.name) }"
+                >
+                  {{ getFirstWord(bookmark.name) }}
+                </div>
+              </div>
+              <div class="bookmark-card-info">
+                <n-ellipsis
+                  class="bookmark-card-name"
+                  :line-clamp="1"
+                  :tooltip="{ width: 300 }"
+                >
+                  {{ bookmark.name }}
+                </n-ellipsis>
+                <n-ellipsis
+                  class="bookmark-card-url"
+                  :line-clamp="1"
+                  :tooltip="{ width: 400 }"
+                >
+                  {{ truncateUrl(bookmark.url) }}
+                </n-ellipsis>
+              </div>
+              <div
+                v-if="isBookmarkSelected(bookmark)"
+                class="bookmark-card-badge"
+              >
+                <n-icon size="16"><CheckmarkCircleOutline /></n-icon>
+              </div>
+            </div>
+          </div>
+          <n-empty
+            v-if="filteredScannedBookmarks.length === 0"
+            description="没有匹配的书签"
+            style="padding: 40px 0"
+          />
+        </n-scrollbar>
+      </div>
+
+      <template #footer>
+        <n-space justify="space-between" align="center">
+          <n-text depth="3" style="font-size: 13px">
+            <n-icon size="16" style="vertical-align: -2px; margin-right: 4px"
+              ><InformationCircleOutline
+            /></n-icon>
+            点击书签卡片或复选框进行选择
+          </n-text>
+          <n-space :size="12">
+            <n-button @click="showBookmarkModal = false">取消</n-button>
+            <n-button
+              type="primary"
+              @click="importSelectedBookmarks"
+              :loading="importingBookmarks"
+              :disabled="selectedBookmarks.length === 0"
+            >
+              <template #icon>
+                <n-icon><BookmarkOutline /></n-icon>
+              </template>
+              导入选中 ({{ selectedBookmarks.length }})
             </n-button>
           </n-space>
         </n-space>
@@ -323,6 +508,7 @@ import {
   NCheckboxGroup,
   NScrollbar,
   NInput as NInputComponent,
+  NDivider,
   useMessage,
   useDialog
 } from "naive-ui";
@@ -340,7 +526,8 @@ import {
   CloudDownloadOutline,
   SparklesOutline,
   CheckmarkCircleOutline,
-  InformationCircleOutline
+  InformationCircleOutline,
+  BookmarkOutline
 } from "@vicons/ionicons5";
 import { websiteApi } from "../api/website";
 import WebsiteModal from "../components/WebsiteModal.vue";
@@ -348,7 +535,8 @@ import { useData } from "../store/data";
 
 const message = useMessage();
 const dialog = useDialog();
-const { websites, reloadWebsites, addWebsite, updateWebsite, removeWebsite } = useData();
+const { websites, reloadWebsites, addWebsite, updateWebsite, removeWebsite } =
+  useData();
 
 const items = websites;
 const searchQuery = ref("");
@@ -365,6 +553,11 @@ const showPreviewModal = ref(false);
 const scannedApps = ref([]);
 const selectedApps = ref([]);
 const appSearchQuery = ref("");
+const importingBookmarks = ref(false);
+const showBookmarkModal = ref(false);
+const scannedBookmarks = ref([]);
+const selectedBookmarks = ref([]);
+const bookmarkSearchQuery = ref("");
 
 const filteredScannedApps = computed(() => {
   if (!appSearchQuery.value) return scannedApps.value;
@@ -373,6 +566,37 @@ const filteredScannedApps = computed(() => {
     app.name?.toLowerCase().includes(query)
   );
 });
+
+const filteredScannedBookmarks = computed(() => {
+  if (!bookmarkSearchQuery.value) return scannedBookmarks.value;
+  const query = bookmarkSearchQuery.value.toLowerCase();
+  return scannedBookmarks.value.filter(
+    (bookmark) =>
+      bookmark.name?.toLowerCase().includes(query) ||
+      bookmark.url?.toLowerCase().includes(query)
+  );
+});
+
+const isBookmarkSelected = (bookmark) => {
+  return selectedBookmarks.value.includes(bookmark.url);
+};
+
+const toggleBookmarkSelection = (bookmark) => {
+  const index = selectedBookmarks.value.indexOf(bookmark.url);
+  if (index > -1) {
+    selectedBookmarks.value.splice(index, 1);
+  } else {
+    selectedBookmarks.value.push(bookmark.url);
+  }
+};
+
+const selectAllBookmarks = () => {
+  selectedBookmarks.value = scannedBookmarks.value.map((b) => b.url);
+};
+
+const deselectAllBookmarks = () => {
+  selectedBookmarks.value = [];
+};
 
 const isAppSelected = (app) => {
   const key = app.path || app.name;
@@ -423,19 +647,19 @@ const filteredItems = computed(() => {
   return result;
 });
 
-const windowWidth = ref(window.innerWidth)
+const windowWidth = ref(window.innerWidth);
 
 const updateWindowWidth = () => {
-  windowWidth.value = window.innerWidth
-}
+  windowWidth.value = window.innerWidth;
+};
 
 onMounted(() => {
-  window.addEventListener('resize', updateWindowWidth)
-})
+  window.addEventListener("resize", updateWindowWidth);
+});
 
 onUnmounted(() => {
-  window.removeEventListener('resize', updateWindowWidth)
-})
+  window.removeEventListener("resize", updateWindowWidth);
+});
 
 const responsiveCols = computed(() => {
   const width = windowWidth.value;
@@ -499,10 +723,12 @@ const columns = [
         });
       }
       const name = row.name || "";
-      const words = name.split(/[\s\-_\.]+/).filter(w => w.length > 0);
-      const displayText = words.length > 0 
-        ? words[0].charAt(0).toUpperCase() + (words[0].length > 1 ? words[0].charAt(1).toLowerCase() : "")
-        : name.charAt(0).toUpperCase() || "W";
+      const words = name.split(/[\s\-_\.]+/).filter((w) => w.length > 0);
+      const displayText =
+        words.length > 0
+          ? words[0].charAt(0).toUpperCase() +
+            (words[0].length > 1 ? words[0].charAt(1).toLowerCase() : "")
+          : name.charAt(0).toUpperCase() || "W";
       return h(
         "div",
         {
@@ -528,14 +754,20 @@ const columns = [
     key: "type",
     width: 80,
     render(row) {
+      const typeMap = {
+        app: { text: "应用", type: "info" },
+        bookmark: { text: "书签", type: "warning" },
+        website: { text: "网站", type: "success" }
+      };
+      const config = typeMap[row.type] || typeMap.website;
       return h(
         NTag,
         {
           size: "small",
-          type: row.type === "app" ? "info" : "success"
+          type: config.type
         },
         {
-          default: () => (row.type === "app" ? "应用" : "网站")
+          default: () => config.text
         }
       );
     }
@@ -543,6 +775,7 @@ const columns = [
   {
     title: "名称",
     key: "name",
+    ellipsis: { tooltip: true },
     render(row) {
       if (editingRowKey.value === row.id) {
         return h(NInputComponent, {
@@ -560,6 +793,7 @@ const columns = [
   {
     title: "别名",
     key: "alias",
+    ellipsis: { tooltip: true },
     render(row) {
       if (editingRowKey.value === row.id) {
         return h(NInputComponent, {
@@ -577,6 +811,7 @@ const columns = [
   {
     title: "地址",
     key: "address",
+    ellipsis: { tooltip: true },
     render(row) {
       if (editingRowKey.value === row.id) {
         if (editingData.value.type === "app") {
@@ -663,9 +898,13 @@ const columns = [
           placeholder: "图标URL"
         });
       }
-      return h(NText, { depth: 3, style: "font-size: 12px;" }, {
-        default: () => row.favicon ? "已设置" : "-"
-      });
+      return h(
+        NText,
+        { depth: 3, style: "font-size: 12px;" },
+        {
+          default: () => (row.favicon ? "已设置" : "-")
+        }
+      );
     }
   },
   {
@@ -791,7 +1030,7 @@ const closeModal = () => {
 
 const handleSave = async (data) => {
   try {
-    const editingId = editingItem.value?.id
+    const editingId = editingItem.value?.id;
     if (editingId) {
       await websiteApi.update(editingId, data);
       updateWebsite(editingId, data);
@@ -892,7 +1131,7 @@ const handleIconError = (e) => {
 };
 
 const handleCardIconError = (e, item) => {
-  e.target.style.display = 'none';
+  e.target.style.display = "none";
   if (item) {
     item._iconError = true;
   }
@@ -900,14 +1139,14 @@ const handleCardIconError = (e, item) => {
 
 const getIconGradient = (name) => {
   const colors = [
-    '#667eea',
-    '#f5576c',
-    '#4facfe',
-    '#43e97b',
-    '#fa709a',
-    '#a8edea',
-    '#ff9a9e',
-    '#fcb69f'
+    "#667eea",
+    "#f5576c",
+    "#4facfe",
+    "#43e97b",
+    "#fa709a",
+    "#a8edea",
+    "#ff9a9e",
+    "#fcb69f"
   ];
   const index = name ? name.charCodeAt(0) % colors.length : 0;
   return colors[index];
@@ -946,6 +1185,73 @@ const importSelectedApps = async () => {
   }
 };
 
+const importBookmarks = async () => {
+  importingBookmarks.value = true;
+  try {
+    const bookmarks = await window.electronAPI?.importBrowserBookmarks();
+    if (bookmarks && bookmarks.length > 0) {
+      const existingUrls = new Set(
+        items.value
+          .filter((i) => i.type === "bookmark" || i.type === "website")
+          .map((i) => i.url)
+      );
+      scannedBookmarks.value = bookmarks.filter(
+        (b) => !existingUrls.has(b.url)
+      );
+      selectedBookmarks.value = [];
+
+      if (scannedBookmarks.value.length === 0) {
+        message.info("所有书签已导入过");
+      } else {
+        showBookmarkModal.value = true;
+      }
+    } else if (bookmarks === null) {
+      // 用户取消选择
+    } else {
+      message.info("未找到新的书签");
+    }
+  } catch (error) {
+    console.error("导入书签失败:", error);
+    message.error("导入书签失败");
+  } finally {
+    importingBookmarks.value = false;
+  }
+};
+
+const importSelectedBookmarks = async () => {
+  importingBookmarks.value = true;
+  let imported = 0;
+  try {
+    for (const url of selectedBookmarks.value) {
+      const bookmark = scannedBookmarks.value.find((b) => b.url === url);
+      if (bookmark) {
+        try {
+          const favicon = bookmark.icon || getBookmarkFavicon(bookmark.url);
+          const response = await websiteApi.create({
+            name: bookmark.name,
+            url: bookmark.url,
+            favicon: favicon,
+            type: "bookmark"
+          });
+          if (response.data.data) {
+            addWebsite(response.data.data);
+          }
+          imported++;
+        } catch (e) {
+          console.error("导入书签失败:", e);
+        }
+      }
+    }
+    showBookmarkModal.value = false;
+    message.success(`成功导入 ${imported} 个书签`);
+  } catch (error) {
+    console.error("导入失败:", error);
+    message.error("导入失败");
+  } finally {
+    importingBookmarks.value = false;
+  }
+};
+
 const truncateUrl = (url) => {
   if (!url) return "";
   try {
@@ -960,6 +1266,19 @@ const truncatePath = (path) => {
   if (!path) return "";
   const fileName = path.split(/[/\\]/).pop();
   return fileName || path;
+};
+
+const getBookmarkDomain = (url) => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+};
+
+const getBookmarkFavicon = (url) => {
+  const domain = getBookmarkDomain(url);
+  return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
 };
 
 onMounted(() => {
@@ -1185,6 +1504,7 @@ onMounted(() => {
   width: 100%;
   text-align: center;
   min-width: 0;
+  overflow: hidden;
 }
 
 .app-card-name {
@@ -1192,11 +1512,19 @@ onMounted(() => {
   font-weight: 500;
   color: var(--text-color, #333);
   margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .app-card-path {
   font-size: 11px;
   color: var(--text-secondary, #999);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .app-card-badge {
@@ -1204,6 +1532,108 @@ onMounted(() => {
   top: 8px;
   right: 8px;
   color: var(--primary-color, #667eea);
+}
+
+.bookmark-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 4px;
+}
+
+.bookmark-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+  background: var(--card-bg, #fff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.bookmark-card:hover {
+  background: rgba(102, 126, 234, 0.04);
+  border-color: rgba(102, 126, 234, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.bookmark-card.selected {
+  background: rgba(102, 126, 234, 0.08);
+  border-color: var(--primary-color, #667eea);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.bookmark-card-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+}
+
+.bookmark-card-icon {
+  width: 32px;
+  height: 32px;
+  margin-right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.bookmark-icon-img {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.bookmark-icon-placeholder {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+}
+
+.bookmark-card-info {
+  flex: 1;
+  min-width: 0;
+  width: 0;
+  overflow: hidden;
+}
+
+.bookmark-card-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-color, #333);
+  margin-bottom: 2px;
+}
+
+.bookmark-card-url {
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+}
+
+.bookmark-card-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  color: var(--primary-color, #667eea);
+}
+
+@media (max-width: 1400px) {
+  .bookmark-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 1200px) {
@@ -1216,8 +1646,12 @@ onMounted(() => {
   .website-manager .n-grid {
     grid-template-columns: repeat(2, 1fr) !important;
   }
-  
+
   .app-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .bookmark-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
@@ -1228,29 +1662,29 @@ onMounted(() => {
     gap: 12px;
     align-items: flex-start;
   }
-  
+
   .website-manager .n-grid {
     grid-template-columns: 1fr !important;
   }
-  
+
   .app-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   .website-card {
     padding: 12px;
   }
-  
+
   .card-icon-wrapper {
     width: 32px;
     height: 32px;
   }
-  
+
   .card-icon {
     width: 32px;
     height: 32px;
   }
-  
+
   .card-icon-placeholder {
     width: 32px;
     height: 32px;
@@ -1258,33 +1692,58 @@ onMounted(() => {
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 512px) {
   .website-manager .page-header {
     padding: 0 4px;
   }
-  
+
   .website-manager .n-button-group {
     flex-wrap: wrap;
   }
-  
+
   .app-grid {
     grid-template-columns: 1fr;
   }
-  
+
+  .bookmark-grid {
+    grid-template-columns: 1fr;
+  }
+
   .app-card {
     padding: 12px 8px;
   }
-  
+
   .app-card-icon {
     width: 40px;
     height: 40px;
   }
-  
+
   .app-icon-img,
   .app-icon-fallback {
     width: 40px;
     height: 40px;
     font-size: 14px;
+  }
+
+  .bookmark-card {
+    padding: 10px 8px;
+  }
+
+  .bookmark-card-icon {
+    width: 28px;
+    height: 28px;
+    margin-right: 8px;
+  }
+
+  .bookmark-icon-img {
+    width: 20px;
+    height: 20px;
+  }
+
+  .bookmark-icon-placeholder {
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
   }
 }
 </style>

@@ -25,5 +25,7 @@ export const snippetApi = {
   
   getByTag: (tag) => api.get(`/snippets/tag/${tag}`),
   
-  togglePin: (id, pinned) => api.put(`/snippets/${id}`, { pinned })
+  togglePin: (id, pinned) => api.put(`/snippets/${id}`, { pinned }),
+  
+  clearAll: () => api.delete('/snippets/clear/all')
 }

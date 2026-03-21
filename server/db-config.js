@@ -5,13 +5,6 @@ let dbType = 'sqlite'
 let dbConfig = {
   sqlite: {
     path: './data/nexious_tools.db'
-  },
-  mysql: {
-    host: 'localhost',
-    port: 3306,
-    user: 'root',
-    password: 'Gmgz.513X',
-    database: 'nexious_tools'
   }
 }
 

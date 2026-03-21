@@ -148,11 +148,22 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   const { title, language, category, description, code, tags, pinned } = req.body
   try {
+    // 检查同一类别下 title 是否重复
+    const recordCategory = category || null
+    const existing = await queryOne(
+      'SELECT id FROM code_snippets WHERE category IS ? AND title = ?',
+      [recordCategory, title]
+    )
+    if (existing) {
+      const categoryText = recordCategory || '未分类'
+      return res.status(400).json({ error: `分类"${categoryText}"下已存在标题为"${title}"的代码片段` })
+    }
+    
     const tagsStr = tags ? JSON.stringify(tags) : null
     const result = await insert('code_snippets', {
       title,
       language: language || 'javascript',
-      category: category || null,
+      category: recordCategory,
       description: description || null,
       code,
       tags: tagsStr,
@@ -167,11 +178,22 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   const { title, language, category, description, code, tags, pinned } = req.body
   try {
+    // 检查同一类别下 title 是否重复（排除当前记录）
+    const recordCategory = category || null
+    const existing = await queryOne(
+      'SELECT id FROM code_snippets WHERE category IS ? AND title = ? AND id != ?',
+      [recordCategory, title, req.params.id]
+    )
+    if (existing) {
+      const categoryText = recordCategory || '未分类'
+      return res.status(400).json({ error: `分类"${categoryText}"下已存在标题为"${title}"的代码片段` })
+    }
+    
     const tagsStr = tags ? JSON.stringify(tags) : null
     await update('code_snippets', req.params.id, {
       title,
       language: language || 'javascript',
-      category: category || null,
+      category: recordCategory,
       description: description || null,
       code,
       tags: tagsStr,
@@ -186,6 +208,16 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     await remove('code_snippets', req.params.id)
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.delete('/clear/all', async (req, res) => {
+  try {
+    await execute('DELETE FROM code_snippets')
+    await execute('DELETE FROM snippet_categories')
     res.json({ success: true })
   } catch (error) {
     res.status(500).json({ error: error.message })

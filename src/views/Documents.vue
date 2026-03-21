@@ -332,10 +332,40 @@ const previewId = 'doc-preview'
 const formattingDoc = ref(false)
 const importingUrl = ref(false)
 const previewScrollEl = ref(null)
+const editorRef = ref(null)
 
 const mdHeadingId = ({ text, level, index }) => {
   return `heading-${index}-${level}-${text.replace(/\s+/g, '-').substring(0, 20)}`
 }
+
+const scrollToEditorBottom = (() => {
+  let scrollTimeout = null
+  return () => {
+    if (scrollTimeout) return
+    scrollTimeout = setTimeout(() => {
+      scrollTimeout = null
+      nextTick(() => {
+        const editorEl = document.querySelector('.md-editor')
+        if (editorEl) {
+          const textarea = editorEl.querySelector('textarea')
+          if (textarea) {
+            textarea.scrollTo({
+              top: textarea.scrollHeight,
+              behavior: 'smooth'
+            })
+          }
+          const previewEl = editorEl.querySelector('.md-editor-preview-wrapper')
+          if (previewEl) {
+            previewEl.scrollTo({
+              top: previewEl.scrollHeight,
+              behavior: 'smooth'
+            })
+          }
+        }
+      })
+    }, 100)
+  }
+})()
 
 const editorToolbars = [
   'bold', 'underline', 'italic', 'strikeThrough',
@@ -691,6 +721,7 @@ const formatDocument = async () => {
             if (data.content) {
               result += data.content
               currentDoc.value.content = result
+              scrollToEditorBottom()
             }
           } catch (e) {
             // ignore parse errors
@@ -722,50 +753,68 @@ const importFromUrl = async () => {
   currentDoc.value.content = '正在读取网页内容...\n'
   
   try {
-    const response = await fetch('http://localhost:3000/api/ai/import-url', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        url: currentDoc.value.source_url,
-        stream: true
-      })
-    })
-    
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || '请求失败')
-    }
-    
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
     let result = ''
+    let isTruncated = false
+    let continueFrom = null
     
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
+    do {
+      const response = await fetch('http://localhost:3000/api/ai/import-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          url: currentDoc.value.source_url,
+          stream: true,
+          continueFrom: continueFrom
+        })
+      })
       
-      const chunk = decoder.decode(value, { stream: true })
-      const lines = chunk.split('\n').filter(line => line.trim() !== '')
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || '请求失败')
+      }
       
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6))
-            if (data.error) {
-              throw new Error(data.error)
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n').filter(line => line.trim() !== '')
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              if (data.error) {
+                throw new Error(data.error)
+              }
+              if (data.content) {
+                result += data.content
+                currentDoc.value.content = result
+                scrollToEditorBottom()
+              }
+              if (data.truncated) {
+                isTruncated = true
+              }
+              if (data.done) {
+                isTruncated = false
+              }
+            } catch (e) {
+              // ignore parse errors
             }
-            if (data.content) {
-              result += data.content
-              currentDoc.value.content = result
-            }
-          } catch (e) {
-            // ignore parse errors
           }
         }
       }
-    }
+      
+      if (isTruncated && result.length > 0) {
+        continueFrom = result.slice(-2000)
+        currentDoc.value.content = result + '\n\n**正在继续生成...**\n'
+      }
+    } while (isTruncated)
     
     if (result) {
       if (!currentDoc.value.title) {

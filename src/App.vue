@@ -218,6 +218,19 @@ const loadingResults = ref(false);
 const quickLaunchRef = ref(null);
 const isInputFocused = ref(false);
 
+const truncateUrl = (url, maxLength = 40) => {
+  if (!url) return '';
+  try {
+    const urlObj = new URL(url);
+    const display = urlObj.hostname + urlObj.pathname;
+    if (display.length <= maxLength) return display;
+    return display.substring(0, maxLength) + '...';
+  } catch {
+    if (url.length <= maxLength) return url;
+    return url.substring(0, maxLength) + '...';
+  }
+};
+
 const quickResults = computed(() => {
   const results = [];
   const query = quickSearchQuery.value.trim();
@@ -229,7 +242,7 @@ const quickResults = computed(() => {
         type: w.type === "app" ? "app" : "website",
         typeLabel: w.type === "app" ? "应用" : "网站",
         name: w.name,
-        subtitle: w.type === "app" ? "应用程序" : (w.alias || w.url)
+        subtitle: w.type === "app" ? "应用程序" : (w.alias || truncateUrl(w.url))
       }))
     );
     return results.slice(0, 8);
@@ -271,7 +284,7 @@ const quickResults = computed(() => {
         type: w.type === "app" ? "app" : "website",
         typeLabel: w.type === "app" ? "应用" : "网站",
         name: w.name,
-        subtitle: w.type === "app" ? "本地应用" : (w.alias || w.url)
+        subtitle: w.type === "app" ? "本地应用" : (w.alias || truncateUrl(w.url))
       });
     }
   });
@@ -703,6 +716,7 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
   overflow: hidden;
+  max-width: calc(100% - 120px);
 }
 
 .result-name {
@@ -713,6 +727,7 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .results-container.dark-mode .result-name {
@@ -731,6 +746,7 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 150px;
 }
 
 .results-container.dark-mode .result-subtitle {
