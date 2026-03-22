@@ -220,8 +220,6 @@ export async function initSqlite() {
     );
 
     if (hasTypeUrlConstraint || !hasTypeNameConstraint) {
-      console.log("正在修复 websites 表约束...");
-      
       db.run(`
         CREATE TABLE IF NOT EXISTS websites_new (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
