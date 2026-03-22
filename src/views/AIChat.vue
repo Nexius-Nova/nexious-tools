@@ -356,37 +356,41 @@ const mentionOptions = computed(() => {
   
   websites.value.forEach(w => {
     options.push({
-      label: `[网站] ${w.name}`,
+      label: w.name,
       value: `website_${w.id}`,
       type: '网站',
-      data: w
+      data: w,
+      icon: () => h(NIcon, { color: 'var(--primary-color)' }, { default: () => h(GlobeOutline) })
     })
   })
   
   passwords.value.forEach(p => {
     options.push({
-      label: `[密码] ${p.title || p.website_name || p.username}`,
+      label: p.title || p.website_name || p.username,
       value: `password_${p.id}`,
       type: '密码',
-      data: p
+      data: p,
+      icon: () => h(NIcon, { color: '#fa8c16' }, { default: () => h(KeyOutline) })
     })
   })
   
   snippets.value.forEach(s => {
     options.push({
-      label: `[代码] ${s.title}`,
+      label: s.title,
       value: `snippet_${s.id}`,
       type: '代码',
-      data: s
+      data: s,
+      icon: () => h(NIcon, { color: '#52c41a' }, { default: () => h(CodeSlashOutline) })
     })
   })
   
   documents.value.forEach(d => {
     options.push({
-      label: `[文档] ${d.title || '无标题'}`,
+      label: d.title || '无标题',
       value: `document_${d.id}`,
       type: '文档',
-      data: d
+      data: d,
+      icon: () => h(NIcon, { color: '#722ed1' }, { default: () => h(DocumentOutline) })
     })
   })
   
@@ -1122,6 +1126,7 @@ onMounted(() => {
 .chat-container {
   flex: 1;
   min-height: 0;
+  max-height: calc(100vh - 200px);
   overflow-y: auto;
   padding: 20px;
 }
