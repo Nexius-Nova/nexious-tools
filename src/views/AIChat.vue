@@ -1121,6 +1121,7 @@ onMounted(() => {
 
 .chat-container {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 20px;
 }
@@ -1227,7 +1228,7 @@ onMounted(() => {
   padding: 16px 20px;
   border-top: 1px solid var(--border-color);
   background: var(--card-bg);
-  min-height: 400px;
+  flex-shrink: 0;
 }
 
 .selected-references {
