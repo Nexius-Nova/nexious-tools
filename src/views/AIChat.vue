@@ -62,12 +62,6 @@
               <n-icon size="14" style="margin-left: 4px;"><ChevronDownOutline /></n-icon>
             </n-button>
           </n-dropdown>
-          <n-button @click="showReferenceModal = true">
-            <template #icon>
-              <n-icon><LinkOutline /></n-icon>
-            </template>
-            引用数据
-          </n-button>
         </n-space>
       </div>
 
@@ -79,7 +73,7 @@
             </div>
             <n-text depth="2" style="font-size: 18px; font-weight: 500;">开始与 AI 对话</n-text>
             <n-text depth="3" style="font-size: 13px;">
-              AI 可以访问您的网站、密码、代码片段和设置数据
+              输入 @ 可引用网站、密码、代码片段、文档数据
             </n-text>
           </div>
 
@@ -233,12 +227,16 @@
           </n-tag>
         </div>
         <div class="input-row">
-          <n-input
+          <n-mention
             v-model:value="inputMessage"
             type="textarea"
-            placeholder="输入消息... (Shift+Enter 换行，Enter 发送)"
+            :options="mentionOptions"
             :autosize="{ minRows: 1, maxRows: 4 }"
+            :loading="mentionLoading"
+            :prefix="['@']"
+            placeholder="输入消息... (@ 引用数据，Shift+Enter 换行，Enter 发送)"
             @keydown="handleKeydown"
+            @select="handleMentionSelect"
             :disabled="loading"
             clearable
           />
@@ -256,127 +254,6 @@
           </n-button>
         </div>
       </div>
-
-      <n-modal v-model:show="showReferenceModal" preset="card" title="引用数据" style="width: 700px;">
-        <div class="reference-modal-content">
-          <n-tabs v-model:value="activeTab" type="line" animated>
-            <n-tab-pane name="websites" tab="网站/应用">
-              <n-input v-model:value="websiteSearch" placeholder="搜索网站..." clearable style="margin-bottom: 12px;">
-                <template #prefix>
-                  <n-icon><SearchOutline /></n-icon>
-                </template>
-              </n-input>
-              <n-scrollbar style="max-height: 320px;">
-                <div class="reference-grid">
-                  <div 
-                    v-for="site in filteredWebsites" 
-                    :key="site.id" 
-                    class="reference-item"
-                    @click="addReference({ type: '网站', id: site.id, name: site.name, data: site })"
-                  >
-                    <div class="reference-icon website">
-                      <img 
-                        v-if="site.favicon" 
-                        :src="site.favicon" 
-                        class="favicon-img"
-                        @error="handleFaviconError"
-                      />
-                      <n-icon v-else size="20"><GlobeOutline /></n-icon>
-                    </div>
-                    <div class="reference-info">
-                      <div class="reference-name">{{ site.name }}</div>
-                      <div class="reference-desc">{{ truncateText(site.url, 35) }}</div>
-                    </div>
-                  </div>
-                </div>
-                <n-empty v-if="filteredWebsites.length === 0" description="暂无网站数据" size="small" />
-              </n-scrollbar>
-            </n-tab-pane>
-            <n-tab-pane name="passwords" tab="密码">
-              <n-input v-model:value="passwordSearch" placeholder="搜索密码..." clearable style="margin-bottom: 12px;">
-                <template #prefix>
-                  <n-icon><SearchOutline /></n-icon>
-                </template>
-              </n-input>
-              <n-scrollbar style="max-height: 320px;">
-                <div class="reference-grid">
-                  <div 
-                    v-for="pwd in filteredPasswords" 
-                    :key="pwd.id" 
-                    class="reference-item"
-                    @click="addReference({ type: '密码', id: pwd.id, name: pwd.title || pwd.website_name || pwd.username, data: pwd })"
-                  >
-                    <div class="reference-icon password">
-                      <n-icon size="20"><KeyOutline /></n-icon>
-                    </div>
-                    <div class="reference-info">
-                      <div class="reference-name">{{ pwd.title || pwd.website_name || '未命名' }}</div>
-                      <div class="reference-desc">{{ pwd.username }}</div>
-                    </div>
-                  </div>
-                </div>
-                <n-empty v-if="filteredPasswords.length === 0" description="暂无密码数据" size="small" />
-              </n-scrollbar>
-            </n-tab-pane>
-            <n-tab-pane name="snippets" tab="代码片段">
-              <n-input v-model:value="snippetSearch" placeholder="搜索代码片段..." clearable style="margin-bottom: 12px;">
-                <template #prefix>
-                  <n-icon><SearchOutline /></n-icon>
-                </template>
-              </n-input>
-              <n-scrollbar style="max-height: 320px;">
-                <div class="reference-grid">
-                  <div 
-                    v-for="snip in filteredSnippets" 
-                    :key="snip.id" 
-                    class="reference-item"
-                    @click="addReference({ type: '代码', id: snip.id, name: snip.title, data: snip })"
-                  >
-                    <div class="reference-icon snippet">
-                      <n-icon size="20"><CodeSlashOutline /></n-icon>
-                    </div>
-                    <div class="reference-info">
-                      <div class="reference-name">{{ snip.title }}</div>
-                      <div class="reference-desc">
-                        <n-tag size="tiny" :bordered="false">{{ snip.language }}</n-tag>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <n-empty v-if="filteredSnippets.length === 0" description="暂无代码片段" size="small" />
-              </n-scrollbar>
-            </n-tab-pane>
-            <n-tab-pane name="documents" tab="文档">
-              <n-input v-model:value="documentSearch" placeholder="搜索文档..." clearable style="margin-bottom: 12px;">
-                <template #prefix>
-                  <n-icon><SearchOutline /></n-icon>
-                </template>
-              </n-input>
-              <n-scrollbar style="max-height: 320px;">
-                <div class="reference-grid">
-                  <div 
-                    v-for="doc in filteredDocuments" 
-                    :key="doc.id" 
-                    class="reference-item"
-                    @click="addReference({ type: '文档', id: doc.id, name: doc.title || '无标题', data: doc })"
-                  >
-                    <div class="reference-icon document">
-                      <n-icon size="20"><DocumentOutline /></n-icon>
-                    </div>
-                    <div class="reference-info">
-                      <div class="reference-name">{{ doc.title || '无标题' }}</div>
-                      <div class="reference-desc">
-                        {{ doc.word_count ? `${doc.word_count} 字` : '文档' }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <n-empty v-if="filteredDocuments.length === 0" description="暂无文档" size="small" />
-              </n-scrollbar>
-            </n-tab-pane>
-          </n-tabs>
-        </div>
-      </n-modal>
     </div>
   </div>
 </template>
@@ -393,41 +270,28 @@ import {
   NText,
   NTag,
   NSpin,
-  NModal,
-  NTabs,
-  NTabPane,
-  NList,
-  NListItem,
-  NThing,
-  NEmpty,
   NScrollbar,
   NDropdown,
-  NAlert,
-  NForm,
-  NFormItem,
   NSelect,
-  NDynamicTags,
+  NEmpty,
+  NMention,
   useMessage
 } from 'naive-ui'
 import {
-  TimeOutline,
   AddOutline,
   TrashOutline,
   ChatbubblesOutline,
   PersonOutline,
   SparklesOutline,
   SendOutline,
-  LinkOutline,
   ChatboxOutline,
   CopyOutline,
-  SearchOutline,
   KeyOutline,
   GlobeOutline,
   CodeSlashOutline,
   DocumentOutline,
   RocketOutline,
-  ChevronDownOutline,
-  CheckmarkOutline
+  ChevronDownOutline
 } from '@vicons/ionicons5'
 import { aiMessageApi } from '../api/ai-message'
 import { websiteApi } from '../api/website'
@@ -445,9 +309,8 @@ const inputMessage = ref('')
 const loading = ref(false)
 const chatContainer = ref(null)
 const streamingContent = ref('')
+const mentionLoading = ref(false)
 
-const showReferenceModal = ref(false)
-const activeTab = ref('websites')
 const selectedReferences = ref([])
 const conversations = ref([])
 const currentConversationId = ref(null)
@@ -456,11 +319,6 @@ const websites = ref([])
 const passwords = ref([])
 const snippets = ref([])
 const documents = ref([])
-
-const websiteSearch = ref('')
-const passwordSearch = ref('')
-const snippetSearch = ref('')
-const documentSearch = ref('')
 
 const currentAgent = ref(null)
 const pendingData = ref({ type: '', data: {} })
@@ -493,8 +351,46 @@ const categoryOptions = computed(() => {
   return categories.value.map(c => ({ label: c.name, value: c.name }))
 })
 
-const folderOptions = computed(() => {
-  return folders.value.map(f => ({ label: f.name, value: f.id }))
+const mentionOptions = computed(() => {
+  const options = []
+  
+  websites.value.forEach(w => {
+    options.push({
+      label: `[网站] ${w.name}`,
+      value: `website_${w.id}`,
+      type: '网站',
+      data: w
+    })
+  })
+  
+  passwords.value.forEach(p => {
+    options.push({
+      label: `[密码] ${p.title || p.website_name || p.username}`,
+      value: `password_${p.id}`,
+      type: '密码',
+      data: p
+    })
+  })
+  
+  snippets.value.forEach(s => {
+    options.push({
+      label: `[代码] ${s.title}`,
+      value: `snippet_${s.id}`,
+      type: '代码',
+      data: s
+    })
+  })
+  
+  documents.value.forEach(d => {
+    options.push({
+      label: `[文档] ${d.title || '无标题'}`,
+      value: `document_${d.id}`,
+      type: '文档',
+      data: d
+    })
+  })
+  
+  return options
 })
 
 const agentOptions = [
@@ -515,43 +411,6 @@ const agentOptions = [
   }
 ]
 
-const filteredWebsites = computed(() => {
-  if (!websiteSearch.value) return websites.value
-  const query = websiteSearch.value.toLowerCase()
-  return websites.value.filter(w =>
-    w.name?.toLowerCase().includes(query) ||
-    w.url?.toLowerCase().includes(query)
-  )
-})
-
-const filteredPasswords = computed(() => {
-  if (!passwordSearch.value) return passwords.value
-  const query = passwordSearch.value.toLowerCase()
-  return passwords.value.filter(p =>
-    p.title?.toLowerCase().includes(query) ||
-    p.username?.toLowerCase().includes(query) ||
-    p.website_name?.toLowerCase().includes(query)
-  )
-})
-
-const filteredSnippets = computed(() => {
-  if (!snippetSearch.value) return snippets.value
-  const query = snippetSearch.value.toLowerCase()
-  return snippets.value.filter(s =>
-    s.title?.toLowerCase().includes(query) ||
-    s.language?.toLowerCase().includes(query)
-  )
-})
-
-const filteredDocuments = computed(() => {
-  if (!documentSearch.value) return documents.value
-  const query = documentSearch.value.toLowerCase()
-  return documents.value.filter(d =>
-    d.title?.toLowerCase().includes(query) ||
-    d.content?.toLowerCase().includes(query)
-  )
-})
-
 const getRefTagType = (type) => {
   const types = {
     '网站': 'info',
@@ -560,21 +419,6 @@ const getRefTagType = (type) => {
     '文档': 'error'
   }
   return types[type] || 'default'
-}
-
-const truncateText = (text, maxLength) => {
-  if (!text) return ''
-  return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
-}
-
-const handleFaviconError = (e) => {
-  e.target.style.display = 'none'
-}
-
-const formatDate = (dateStr) => {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN')
 }
 
 const formatDateShort = (dateStr) => {
@@ -665,11 +509,19 @@ const startNewConversation = () => {
   selectedReferences.value = []
 }
 
-const addReference = (ref) => {
+const handleMentionSelect = (option) => {
+  const ref = {
+    type: option.type,
+    id: option.data.id,
+    name: option.type === '密码' 
+      ? (option.data.title || option.data.website_name || option.data.username)
+      : (option.data.name || option.data.title || '无标题'),
+    data: option.data
+  }
+  
   if (!selectedReferences.value.find(r => r.id === ref.id && r.type === ref.type)) {
     selectedReferences.value.push(ref)
   }
-  showReferenceModal.value = false
 }
 
 const removeReference = (ref) => {
@@ -1392,106 +1244,8 @@ onMounted(() => {
   align-items: flex-end;
 }
 
-.input-row .n-input {
+.input-row .n-mention {
   flex: 1;
-}
-
-.reference-modal-content {
-  min-height: 400px;
-}
-
-.reference-grid {
-  margin-top: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.reference-item {
-  display: flex;
-  align-items: center;
-  padding: 12px 14px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid var(--border-color);
-  background: var(--card-bg);
-}
-
-.reference-item:hover {
-  background: var(--primary-light);
-  border-color: var(--primary-color);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
-}
-
-.reference-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 12px;
-  flex-shrink: 0;
-}
-
-.reference-icon.website {
-  background: linear-gradient(135deg, rgba(13, 116, 234, 0.15) 0%, rgba(13, 116, 234, 0.05) 100%);
-  color: var(--primary-color);
-}
-
-.reference-icon.password {
-  background: linear-gradient(135deg, rgba(250, 140, 22, 0.15) 0%, rgba(250, 140, 22, 0.05) 100%);
-  color: #fa8c16;
-}
-
-.reference-icon.snippet {
-  background: linear-gradient(135deg, rgba(82, 196, 26, 0.15) 0%, rgba(82, 196, 26, 0.05) 100%);
-  color: #52c41a;
-}
-
-.reference-icon.document{
-  background: linear-gradient(135deg, rgba(114, 46, 209, 0.15) 0%, rgba(114, 46, 209, 0.05) 100%);
-  color: #722ed1;
-}
-
-.favicon-img {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  object-fit: cover;
-}
-
-.reference-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.reference-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.reference-desc {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.review-modal-content {
-  min-height: 300px;
-}
-
-.review-section {
-  margin-top: 8px;
 }
 
 .inline-review {
@@ -1553,5 +1307,4 @@ onMounted(() => {
   padding-top: 12px;
   border-top: 1px solid var(--border-color);
 }
-
 </style>
