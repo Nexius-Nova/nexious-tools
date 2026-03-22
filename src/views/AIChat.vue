@@ -292,7 +292,8 @@ import {
   CodeSlashOutline,
   DocumentOutline,
   RocketOutline,
-  ChevronDownOutline
+  ChevronDownOutline,
+  DesktopOutline
 } from '@vicons/ionicons5'
 import { aiMessageApi } from '../api/ai-message'
 import { websiteApi } from '../api/website'
@@ -354,31 +355,45 @@ const categoryOptions = computed(() => {
 
 const mentionOptions = computed(() => {
   const options = []
+  const maxLength = 20
   
   websites.value.forEach(w => {
-    options.push({
-      label: w.name,
-      value: `website_${w.id}`
-    })
+    const truncatedLabel = w.name?.length > maxLength ? w.name.substring(0, maxLength) + '...' : w.name
+    if (w.type === 'desktop') {
+      options.push({
+        label: truncatedLabel,
+        value: `desktop_${w.id}`
+      })
+    } else {
+      options.push({
+        label: truncatedLabel,
+        value: `website_${w.id}`
+      })
+    }
   })
   
   passwords.value.forEach(p => {
+    const label = p.title || p.website_name || p.username
+    const truncatedLabel = label?.length > maxLength ? label.substring(0, maxLength) + '...' : label
     options.push({
-      label: p.title || p.website_name || p.username,
+      label: truncatedLabel,
       value: `password_${p.id}`
     })
   })
   
   snippets.value.forEach(s => {
+    const truncatedLabel = s.title?.length > maxLength ? s.title.substring(0, maxLength) + '...' : s.title
     options.push({
-      label: s.title,
+      label: truncatedLabel,
       value: `snippet_${s.id}`
     })
   })
   
   documents.value.forEach(d => {
+    const label = d.title || '无标题'
+    const truncatedLabel = label?.length > maxLength ? label.substring(0, maxLength) + '...' : label
     options.push({
-      label: d.title || '无标题',
+      label: truncatedLabel,
       value: `document_${d.id}`
     })
   })
@@ -390,6 +405,7 @@ const renderMentionLabel = (option) => {
   const typePrefix = option.value.split('_')[0]
   const iconMap = {
     'website': { icon: GlobeOutline, color: 'var(--primary-color)' },
+    'desktop': { icon: DesktopOutline, color: '#1890ff' },
     'password': { icon: KeyOutline, color: '#fa8c16' },
     'snippet': { icon: CodeSlashOutline, color: '#52c41a' },
     'document': { icon: DocumentOutline, color: '#722ed1' }
@@ -518,16 +534,54 @@ const startNewConversation = () => {
 }
 
 const handleMentionSelect = (option) => {
-  const ref = {
-    type: option.type,
-    id: option.data.id,
-    name: option.type === '密码' 
-      ? (option.data.title || option.data.website_name || option.data.username)
-      : (option.data.name || option.data.title || '无标题'),
-    data: option.data
+  const [typePrefix, idStr] = option.value.split('_')
+  const id = parseInt(idStr)
+  
+  let ref = null
+  
+  if (typePrefix === 'website' || typePrefix === 'desktop') {
+    const item = websites.value.find(w => w.id === id)
+    if (item) {
+      ref = {
+        type: typePrefix === 'desktop' ? '应用' : '网站',
+        id: item.id,
+        name: item.name,
+        data: item
+      }
+    }
+  } else if (typePrefix === 'password') {
+    const item = passwords.value.find(p => p.id === id)
+    if (item) {
+      ref = {
+        type: '密码',
+        id: item.id,
+        name: item.title || item.website_name || item.username,
+        data: item
+      }
+    }
+  } else if (typePrefix === 'snippet') {
+    const item = snippets.value.find(s => s.id === id)
+    if (item) {
+      ref = {
+        type: '代码',
+        id: item.id,
+        name: item.title,
+        data: item
+      }
+    }
+  } else if (typePrefix === 'document') {
+    const item = documents.value.find(d => d.id === id)
+    if (item) {
+      ref = {
+        type: '文档',
+        id: item.id,
+        name: item.title || '无标题',
+        data: item
+      }
+    }
   }
   
-  if (!selectedReferences.value.find(r => r.id === ref.id && r.type === ref.type)) {
+  if (ref && !selectedReferences.value.find(r => r.id === ref.id && r.type === ref.type)) {
     selectedReferences.value.push(ref)
   }
 }
