@@ -10,16 +10,18 @@
     @expand="collapsed = false"
     class="sidebar-sider"
   >
-    <n-menu
-      :collapsed="collapsed"
-      :collapsed-width="64"
-      :collapsed-icon-size="22"
-      :value="activeTab"
-      :options="menuOptions"
-      @update:value="handleMenuChange"
-    />
-    <div class="sidebar-footer" v-if="!collapsed">
-      <n-text depth="3" style="font-size: 11px">v1.0.0</n-text>
+    <div class="sidebar-content">
+      <n-menu
+        :collapsed="collapsed"
+        :collapsed-width="64"
+        :collapsed-icon-size="22"
+        :value="activeTab"
+        :options="menuOptions"
+        @update:value="handleMenuChange"
+      />
+      <div class="sidebar-footer" v-if="!collapsed">
+        <n-text depth="3" style="font-size: 11px">v1.0.0</n-text>
+      </div>
     </div>
   </n-layout-sider>
 </template>
@@ -98,28 +100,32 @@ const handleMenuChange = (key) => {
 <style scoped>
 .sidebar-sider {
   background: var(--sidebar-bg);
+  height: 100%;
 }
 
-.sidebar-sider :deep(.n-layout-sider__border) {
-  border-right: 1px solid var(--border-color);
+.sidebar-sider :deep(.n-layout-sider-scroll-container) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-.sidebar-sider :deep(.n-layout-sider-toggle-bar) {
-  width: 24px;
+.sidebar-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 100%;
 }
 
-.sidebar-sider :deep(.n-menu) {
-  height: calc(100% - 40px);
+.sidebar-content :deep(.n-menu) {
+  flex: 1;
+  min-height: 0;
 }
 
 .sidebar-footer {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
   padding: 12px;
   text-align: center;
   border-top: 1px solid var(--border-color);
   background: var(--sidebar-bg);
+  flex-shrink: 0;
 }
 </style>

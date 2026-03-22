@@ -572,13 +572,14 @@ onUnmounted(() => {
 
 .main-layout {
   flex: 1;
-  overflow: hidden;
+  min-height: 0;
+  height: 100%;
 }
 
 .content-layout {
   flex: 1;
-  overflow: hidden;
   background-color: var(--bg-color);
+  min-height: 0;
 }
 
 .content-area {
