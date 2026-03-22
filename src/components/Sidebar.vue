@@ -99,29 +99,27 @@ const handleMenuChange = (key) => {
 .sidebar-sider {
   background: var(--sidebar-bg) !important;
   height: 100%;
-  display: flex;
-  flex-direction: column;
+  position: relative;
 }
 
 .sidebar-sider :deep(.n-layout-sider-scroll-container) {
   height: 100% !important;
-  display: flex !important;
-  flex-direction: column !important;
-  justify-content: space-between !important;
+  padding-bottom: 44px;
 }
 
 .sidebar-sider :deep(.n-menu) {
-  flex: 1;
-  min-height: 0;
   background: var(--sidebar-bg) !important;
 }
 
 .sidebar-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
   padding: 12px;
   text-align: center;
   border-top: 1px solid var(--border-color);
   background: var(--sidebar-bg);
-  flex-shrink: 0;
-  margin-top: auto;
+  z-index: 1;
 }
 </style>
