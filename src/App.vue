@@ -8,20 +8,22 @@
         <div class="app-container" :class="{ 'full-app': showFullApp }">
           <template v-if="showFullApp">
             <TitleBar />
-            <div class="main-wrapper">
+            <n-layout has-sider class="main-layout">
               <Sidebar :activeTab="currentTab" @changeTab="changeTab" />
-              <main class="content-area">
-                <div class="content-header" v-if="showBackButton">
-                  <n-button text @click="backToQuickSearch" class="back-btn">
-                    <template #icon>
-                      <n-icon><ArrowBackOutline /></n-icon>
-                    </template>
-                    返回快速搜索窗
-                  </n-button>
-                </div>
-                <router-view />
-              </main>
-            </div>
+              <n-layout class="content-layout">
+                <n-layout-content class="content-area">
+                  <div class="content-header" v-if="showBackButton">
+                    <n-button text @click="backToQuickSearch" class="back-btn">
+                      <template #icon>
+                        <n-icon><ArrowBackOutline /></n-icon>
+                      </template>
+                      返回快速搜索窗
+                    </n-button>
+                  </div>
+                  <router-view />
+                </n-layout-content>
+              </n-layout>
+            </n-layout>
           </template>
 
           <template v-else>
@@ -184,6 +186,8 @@ import {
   NIcon,
   NTag,
   NAvatar,
+  NLayout,
+  NLayoutContent,
   darkTheme
 } from "naive-ui";
 import {
@@ -566,18 +570,22 @@ onUnmounted(() => {
   background-color: var(--bg-color);
 }
 
-.main-wrapper {
-  display: flex;
+.main-layout {
   flex: 1;
   overflow: hidden;
 }
 
-.content-area {
+.content-layout {
   flex: 1;
+  overflow: hidden;
+  background-color: var(--bg-color);
+}
+
+.content-area {
   padding: 24px;
+  height: 100%;
   overflow-y: auto;
   background-color: var(--bg-color);
-  height: calc(100vh - var(--title-bar-height));
 }
 
 .content-header {
