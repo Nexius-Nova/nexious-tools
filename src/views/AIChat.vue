@@ -1227,6 +1227,7 @@ onMounted(() => {
   padding: 16px 20px;
   border-top: 1px solid var(--border-color);
   background: var(--card-bg);
+  min-height: 400px;
 }
 
 .selected-references {
@@ -1234,8 +1235,8 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 8px;
   padding: 10px 14px;
-  background: var(--bg-color);
-  border-radius: 10px;
+    background: var(--bg-color);
+    border-radius: 10px;
 }
 
 .input-row {
