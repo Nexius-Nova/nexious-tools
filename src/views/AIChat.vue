@@ -234,6 +234,7 @@
             :autosize="{ minRows: 1, maxRows: 4 }"
             :loading="mentionLoading"
             :prefix="['@']"
+            :render-label="renderMentionLabel"
             placeholder="输入消息... (@ 引用数据，Shift+Enter 换行，Enter 发送)"
             @keydown="handleKeydown"
             @select="handleMentionSelect"
@@ -357,45 +358,48 @@ const mentionOptions = computed(() => {
   websites.value.forEach(w => {
     options.push({
       label: w.name,
-      value: `website_${w.id}`,
-      type: '网站',
-      data: w,
-      icon: () => h(NIcon, { color: 'var(--primary-color)' }, { default: () => h(GlobeOutline) })
+      value: `website_${w.id}`
     })
   })
   
   passwords.value.forEach(p => {
     options.push({
       label: p.title || p.website_name || p.username,
-      value: `password_${p.id}`,
-      type: '密码',
-      data: p,
-      icon: () => h(NIcon, { color: '#fa8c16' }, { default: () => h(KeyOutline) })
+      value: `password_${p.id}`
     })
   })
   
   snippets.value.forEach(s => {
     options.push({
       label: s.title,
-      value: `snippet_${s.id}`,
-      type: '代码',
-      data: s,
-      icon: () => h(NIcon, { color: '#52c41a' }, { default: () => h(CodeSlashOutline) })
+      value: `snippet_${s.id}`
     })
   })
   
   documents.value.forEach(d => {
     options.push({
       label: d.title || '无标题',
-      value: `document_${d.id}`,
-      type: '文档',
-      data: d,
-      icon: () => h(NIcon, { color: '#722ed1' }, { default: () => h(DocumentOutline) })
+      value: `document_${d.id}`
     })
   })
   
   return options
 })
+
+const renderMentionLabel = (option) => {
+  const typePrefix = option.value.split('_')[0]
+  const iconMap = {
+    'website': { icon: GlobeOutline, color: 'var(--primary-color)' },
+    'password': { icon: KeyOutline, color: '#fa8c16' },
+    'snippet': { icon: CodeSlashOutline, color: '#52c41a' },
+    'document': { icon: DocumentOutline, color: '#722ed1' }
+  }
+  const config = iconMap[typePrefix] || { icon: GlobeOutline, color: 'var(--primary-color)' }
+  return h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+    h(NIcon, { color: config.color, size: 16 }, { default: () => h(config.icon) }),
+    h('span', {}, option.label)
+  ])
+}
 
 const agentOptions = [
   { 
