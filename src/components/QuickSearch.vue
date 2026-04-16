@@ -1,7 +1,7 @@
 <template>
   <n-modal 
     v-model:show="showModal" 
-    style="width: 600px;" 
+    style="width: 560px;" 
     :mask-closable="true" 
     :trap-focus="false"
     :transform-origin="'center'"
@@ -11,65 +11,65 @@
     :display-directive="'show'"
   >
     <transition name="quick-search-fade" appear>
-      <div class="quick-search-content" :class="{ 'dark-mode': isDarkMode }" v-if="showModal">
-      <n-input 
-        ref="searchInput"
-        v-model:value="searchQuery"
-        placeholder="搜索网站、密码、代码片段、文档..."
-        size="large"
-        clearable
-        @keydown.esc="showModal = false"
-        @keydown.enter="selectFirst"
-        @keydown.up="navigateUp"
-        @keydown.down="navigateDown"
-      >
-        <template #prefix>
-          <n-icon size="20"><SearchOutline /></n-icon>
-        </template>
-      </n-input>
+      <div class="command-palette" :class="{ 'dark-mode': isDarkMode }" v-if="showModal">
+        <div class="command-input-wrapper">
+          <n-icon size="20" class="search-icon"><SearchOutline /></n-icon>
+          <input
+            ref="searchInput"
+            v-model="searchQuery"
+            type="text"
+            class="command-input"
+            placeholder="搜索网站、密码、代码片段、文档..."
+            @keydown="handleKeydown"
+          />
+        </div>
 
-      <div class="search-results" v-if="filteredResults.length > 0">
-        <div 
-          v-for="(item, index) in filteredResults" 
-          :key="item.type + '-' + item.id"
-          :class="['result-item', { selected: index === selectedIndex }]"
-          @click="selectItem(item)"
-          @mouseenter="selectedIndex = index"
-        >
-          <div class="result-icon">
-            <n-avatar
-              v-if="item.type === 'website'"
-              :src="item.favicon"
-              :size="28"
-              round
-            />
-            <n-avatar
-              v-else-if="item.type === 'app'"
-              :src="item.favicon"
-              :size="28"
-              round
-            />
-            <n-avatar
-              v-else-if="item.type === 'bookmark'"
-              :src="item.favicon"
-              :size="28"
-              round
-            />
-            <n-icon v-else-if="item.type === 'password'" size="20"><KeyOutline /></n-icon>
-            <n-icon v-else-if="item.type === 'document'" size="20"><DocumentOutline /></n-icon>
-            <n-icon v-else-if="item.type === 'default-search'" size="20"><SearchOutline /></n-icon>
-            <n-icon v-else size="20"><CodeSlashOutline /></n-icon>
-          </div>
-          <div class="result-info">
-            <div class="result-name">{{ item.name }}</div>
-          </div>
-          <div class="result-action">
-            <span class="result-subtitle">{{ item.subtitle }}</span>
-            <n-icon size="14"><EnterOutline /></n-icon>
+        <div class="command-list" v-if="filteredResults.length > 0">
+          <div 
+            v-for="(item, index) in filteredResults" 
+            :key="item.type + '-' + item.id"
+            :class="['command-item', { selected: index === selectedIndex }]"
+            @click="selectItem(item)"
+            @mouseenter="selectedIndex = index"
+          >
+            <div class="command-icon">
+              <n-avatar
+                v-if="item.type === 'website' || item.type === 'bookmark'"
+                :src="item.favicon"
+                :size="18"
+                round
+              />
+              <n-avatar
+                v-else-if="item.type === 'app'"
+                :src="item.favicon"
+                :size="18"
+                round
+              />
+              <n-icon v-else-if="item.type === 'password'" size="18"><KeyOutline /></n-icon>
+              <n-icon v-else-if="item.type === 'document'" size="18"><DocumentOutline /></n-icon>
+              <n-icon v-else-if="item.type === 'default-search'" size="18"><SearchOutline /></n-icon>
+              <n-icon v-else size="18"><CodeSlashOutline /></n-icon>
+            </div>
+            <div class="command-content">
+              <div class="command-name">{{ item.name }}</div>
+              <div class="command-desc" v-if="item.subtitle">{{ item.subtitle }}</div>
+            </div>
+            <div class="command-shortcut" v-if="item.typeLabel">
+              {{ item.typeLabel }}
+            </div>
           </div>
         </div>
+
+        <div class="command-empty" v-else-if="searchQuery">
+          <n-text depth="3">未找到匹配的结果</n-text>
+        </div>
+
+        <div class="command-footer">
+          <span><kbd>↑</kbd><kbd>↓</kbd> 导航</span>
+          <span><kbd>Enter</kbd> 打开</span>
+          <span><kbd>Esc</kbd> 关闭</span>
+        </div>
       </div>
-    </div>
     </transition>
   </n-modal>
 
@@ -129,11 +129,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, inject } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { NModal, NInput, NIcon, NTag, NDescriptions, NDescriptionsItem, NText, NButton, NSpace, NCode, NAvatar, useMessage } from 'naive-ui'
-import { SearchOutline, SettingsOutline, KeyOutline, CodeSlashOutline, EnterOutline, DocumentOutline } from '@vicons/ionicons5'
-import { passwordApi } from '../api/password'
+import { NModal, NIcon, NTag, NDescriptions, NDescriptionsItem, NText, NButton, NSpace, NCode, NAvatar, useMessage } from 'naive-ui'
+import { SearchOutline, KeyOutline, CodeSlashOutline, DocumentOutline } from '@vicons/ionicons5'
 import { useTheme } from '../store/theme'
 import { useData } from '../store/data'
 
@@ -300,6 +299,27 @@ const loadData = async () => {
   }
 }
 
+const handleKeydown = (e) => {
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    if (selectedIndex.value < filteredResults.value.length - 1) {
+      selectedIndex.value++
+    }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    if (selectedIndex.value > 0) {
+      selectedIndex.value--
+    }
+  } else if (e.key === 'Enter') {
+    e.preventDefault()
+    if (filteredResults.value.length > 0) {
+      selectItem(filteredResults.value[selectedIndex.value])
+    }
+  } else if (e.key === 'Escape') {
+    showModal.value = false
+  }
+}
+
 const selectItem = async (item) => {
   searchQuery.value = ''
   if (item.type === 'default-search' && item.searchTerm) {
@@ -354,24 +374,6 @@ const copyPassword = async () => {
   }
 }
 
-const selectFirst = () => {
-  if (filteredResults.value.length > 0) {
-    selectItem(filteredResults.value[selectedIndex.value])
-  }
-}
-
-const navigateUp = () => {
-  if (selectedIndex.value > 0) {
-    selectedIndex.value--
-  }
-}
-
-const navigateDown = () => {
-  if (selectedIndex.value < filteredResults.value.length - 1) {
-    selectedIndex.value++
-  }
-}
-
 watch(searchQuery, () => {
   selectedIndex.value = 0
 })
@@ -389,156 +391,124 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.quick-search-content {
-  background: rgba(255, 255, 255, 0.98);
-  border-radius: 10px;
-  padding: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-  transition: background 0.3s, box-shadow 0.3s;
-}
-
-.quick-search-content.dark-mode {
-  background: rgba(30, 30, 30, 0.98);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
-}
-
-.quick-search-content :deep(.n-input) {
-  --n-height: 48px;
-  --n-font-size: 15px;
-}
-
-.quick-search-content.dark-mode :deep(.n-input) {
-  --n-color: transparent;
-  --n-text-color: #ffffff;
-  --n-placeholder-color: rgba(255, 255, 255, 0.5);
-}
-
-.quick-search-content :deep(.n-input .n-input__border),
-.quick-search-content :deep(.n-input .n-input__state-border) {
-  border: none;
-  box-shadow: none;
-}
-
-.settings-icon {
-  color: #999;
-  transition: color 0.2s;
-}
-
-.quick-search-content.dark-mode .settings-icon {
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.settings-icon:hover {
-  color: #667eea;
-}
-
-.quick-search-content.dark-mode .settings-icon:hover {
-  color: #667eea;
-}
-
-.search-results {
-  margin-top: 8px;
-  border-radius: 8px;
+.command-palette {
+  background: var(--card-bg);
+  border-radius: 12px;
   overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 
-.result-item {
+.command-input-wrapper {
   display: flex;
   align-items: center;
-  padding: 10px 14px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.search-icon {
+  color: var(--text-color-3);
+  margin-right: 12px;
+}
+
+.command-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 16px;
+  background: transparent;
+  color: var(--text-color);
+}
+
+.command-input::placeholder {
+  color: var(--text-color-4);
+}
+
+.command-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.command-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: background-color 0.15s;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  transition: background 0.15s;
 }
 
-.quick-search-content.dark-mode .result-item {
-  border-bottom-color: rgba(255, 255, 255, 0.08);
+.command-item:hover,
+.command-item.selected {
+  background: var(--primary-light);
 }
 
-.result-item:last-child {
-  border-bottom: none;
-}
-
-.result-item.selected,
-.result-item:hover {
-  background-color: rgba(102, 126, 234, 0.1);
-}
-
-.quick-search-content.dark-mode .result-item.selected,
-.quick-search-content.dark-mode .result-item:hover {
-  background-color: rgba(102, 126, 234, 0.2);
-}
-
-.result-icon {
-  width: 36px;
-  height: 36px;
+.command-icon {
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(102, 126, 234, 0.1);
   border-radius: 8px;
+  background: var(--bg-color);
   margin-right: 12px;
-  color: #667eea;
+  color: var(--primary-color);
 }
 
-.quick-search-content.dark-mode .result-icon {
-  background: rgba(102, 126, 234, 0.2);
-  color: #8b9cf5;
-}
-
-.result-info {
+.command-content {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  max-width: calc(100% - 100px);
 }
 
-.result-name {
+.command-name {
   font-size: 14px;
   font-weight: 500;
-  color: #333;
+  color: var(--text-color);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
 }
 
-.quick-search-content.dark-mode .result-name {
-  color: #ffffff;
+.command-desc {
+  font-size: 12px;
+  color: var(--text-color-3);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.result-subtitle {
+.command-shortcut {
   font-size: 11px;
-  color: #999;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
+  padding: 2px 8px;
+  background: var(--bg-color);
+  border-radius: 4px;
+  color: var(--text-color-3);
 }
 
-.quick-search-content.dark-mode .result-subtitle {
-  color: rgba(255, 255, 255, 0.5);
+.command-empty {
+  padding: 32px;
+  text-align: center;
 }
 
-.result-action {
-  color: #ccc;
-  margin-left: 8px;
-  width: 60px;
+.command-footer {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px;
+  border-top: 1px solid var(--border-color);
+  font-size: 12px;
+  color: var(--text-color-4);
 }
 
-.quick-search-content.dark-mode .result-action {
-  color: rgba(255, 255, 255, 0.3);
-}
-
-.result-item.selected .result-action {
-  color: #0d74ea;
-}
-
-.quick-search-content.dark-mode .result-item.selected .result-action {
-  color: #667eea;
+.command-footer kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  background: var(--bg-color);
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 11px;
+  margin-right: 4px;
 }
 
 .quick-search-fade-enter-active {

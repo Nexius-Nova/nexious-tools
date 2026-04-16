@@ -95,7 +95,7 @@ const fetchWithTimeout = async (url, options, timeout = 120000) => {
 }
 
 router.post('/chat', async (req, res) => {
-  const { message: userMessage, history = [], stream = true, systemPrompt: customSystemPrompt, continueFrom = null } = req.body
+  const { message: userMessage, history = [], stream = true, systemPrompt: customSystemPrompt, continueFrom = null, temperature = 0.7, max_tokens = 4096 } = req.body
   
   if (!userMessage && !continueFrom) {
     return res.status(400).json({ error: '消息不能为空' })
@@ -157,7 +157,8 @@ ${continueFrom}
         body: JSON.stringify({
           model: config.model,
           messages: messages,
-          max_tokens: 4096,
+          max_tokens: max_tokens,
+          temperature: temperature,
           stream: true
         })
       }, 300000)
@@ -222,7 +223,7 @@ ${continueFrom}
         },
         body: JSON.stringify({
           model: config.model,
-          max_tokens: 4096,
+          max_tokens: max_tokens,
           messages: messages.filter(m => m.role !== 'system').map(m => ({
             role: m.role,
             content: m.content
@@ -251,7 +252,8 @@ ${continueFrom}
         body: JSON.stringify({
           model: config.model,
           messages: messages,
-          max_tokens: 4096
+          max_tokens: max_tokens,
+          temperature: temperature
         })
       })
       

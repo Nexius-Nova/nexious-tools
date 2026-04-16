@@ -62,8 +62,10 @@
       <n-tab-pane name="bookmark" tab="网页收藏" />
     </n-tabs>
 
+    <SkeletonLoader v-if="loading" type="card" :count="6" />
+
     <n-grid
-      v-if="viewMode === 'card'"
+      v-else-if="viewMode === 'card'"
       :cols="responsiveCols"
       :x-gap="16"
       :y-gap="16"
@@ -541,11 +543,12 @@ import {
 } from "@vicons/ionicons5";
 import { websiteApi } from "../api/website";
 import WebsiteModal from "../components/WebsiteModal.vue";
+import SkeletonLoader from "../components/SkeletonLoader.vue";
 import { useData } from "../store/data";
 
 const message = useMessage();
 const dialog = useDialog();
-const { websites, reloadWebsites, addWebsite, updateWebsite, removeWebsite } =
+const { websites, reloadWebsites, addWebsite, updateWebsite, removeWebsite, loading } =
   useData();
 
 const items = websites;

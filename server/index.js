@@ -13,6 +13,7 @@ import aiMessagesRouter from './routes/ai-messages.js'
 import documentsRouter from './routes/documents.js'
 import docFoldersRouter from './routes/doc-folders.js'
 import uploadsRouter from './routes/uploads.js'
+import promptTemplatesRouter from './routes/prompt-templates.js'
 
 let __dirname
 const metaUrl = import.meta.url
@@ -50,6 +51,7 @@ app.use('/api/ai-messages', aiMessagesRouter)
 app.use('/api/documents', documentsRouter)
 app.use('/api/doc-folders', docFoldersRouter)
 app.use('/api/upload', uploadsRouter)
+app.use('/api/prompt-templates', promptTemplatesRouter)
 
 app.use((err, req, res, next) => {
   console.error('Error:', err)

@@ -88,6 +88,17 @@
           <n-h2>AI 对话</n-h2>
         </div>
         <n-space>
+          <n-dropdown :options="templateOptions" @select="handleTemplateSelect">
+            <n-button>
+              <template #icon>
+                <n-icon><DocumentTextOutline /></n-icon>
+              </template>
+              {{ currentTemplate ? currentTemplate.name : "提示词模板" }}
+              <n-icon size="14" style="margin-left: 4px"
+                ><ChevronDownOutline
+              /></n-icon>
+            </n-button>
+          </n-dropdown>
           <n-dropdown :options="agentOptions" @select="handleAgentSelect">
             <n-button>
               <template #icon>
@@ -99,6 +110,12 @@
               /></n-icon>
             </n-button>
           </n-dropdown>
+          <n-button @click="showParamsModal = true">
+            <template #icon>
+              <n-icon><SettingsOutline /></n-icon>
+            </template>
+            参数
+          </n-button>
           <n-button @click="showReferenceModal = true">
             <template #icon>
               <n-icon><LinkOutline /></n-icon>
@@ -618,6 +635,122 @@
           </n-tabs>
         </div>
       </n-modal>
+
+      <n-modal
+        v-model:show="showParamsModal"
+        preset="card"
+        title="模型参数设置"
+        style="width: 500px"
+      >
+        <div class="params-modal-content">
+          <n-form :model="modelParams" label-placement="left" label-width="120px">
+            <n-form-item label="Temperature">
+              <n-slider
+                v-model:value="modelParams.temperature"
+                :min="0"
+                :max="2"
+                :step="0.1"
+                :tooltip="true"
+                style="flex: 1"
+              />
+              <n-input-number
+                v-model:value="modelParams.temperature"
+                :min="0"
+                :max="2"
+                :step="0.1"
+                size="small"
+                style="width: 80px; margin-left: 12px"
+              />
+            </n-form-item>
+            <n-form-item label="Max Tokens">
+              <n-slider
+                v-model:value="modelParams.max_tokens"
+                :min="256"
+                :max="8192"
+                :step="256"
+                :tooltip="true"
+                style="flex: 1"
+              />
+              <n-input-number
+                v-model:value="modelParams.max_tokens"
+                :min="256"
+                :max="8192"
+                :step="256"
+                size="small"
+                style="width: 100px; margin-left: 12px"
+              />
+            </n-form-item>
+          </n-form>
+          <div class="params-tips">
+            <n-text depth="3" style="font-size: 12px">
+              Temperature 控制回复的随机性，值越低越确定，值越高越随机。<br/>
+              Max Tokens 控制回复的最大长度。
+            </n-text>
+          </div>
+        </div>
+      </n-modal>
+
+      <n-modal
+        v-model:show="showTemplateModal"
+        preset="card"
+        title="提示词模板管理"
+        style="width: 700px"
+      >
+        <div class="template-modal-content">
+          <n-space vertical size="large">
+            <div class="template-list">
+              <div
+                v-for="template in templates"
+                :key="template.id"
+                class="template-item"
+                :class="{ active: currentTemplate?.id === template.id }"
+                @click="selectTemplate(template)"
+              >
+                <div class="template-info">
+                  <div class="template-name">{{ template.name }}</div>
+                  <div class="template-desc">{{ template.description }}</div>
+                </div>
+                <n-button
+                  v-if="!template.is_default"
+                  text
+                  type="error"
+                  size="small"
+                  @click.stop="deleteTemplate(template.id)"
+                >
+                  删除
+                </n-button>
+              </div>
+            </div>
+            <n-divider />
+            <n-form :model="newTemplate" label-placement="left">
+              <n-form-item label="名称">
+                <n-input v-model:value="newTemplate.name" placeholder="模板名称" />
+              </n-form-item>
+              <n-form-item label="分类">
+                <n-select
+                  v-model:value="newTemplate.category"
+                  :options="templateCategoryOptions"
+                  placeholder="选择分类"
+                />
+              </n-form-item>
+              <n-form-item label="描述">
+                <n-input v-model:value="newTemplate.description" placeholder="模板描述" />
+              </n-form-item>
+              <n-form-item label="内容">
+                <n-input
+                  v-model:value="newTemplate.content"
+                  type="textarea"
+                  :rows="4"
+                  placeholder="提示词内容"
+                />
+              </n-form-item>
+              <n-button type="primary" @click="createTemplate" :disabled="!newTemplate.name || !newTemplate.content">
+                添加模板
+              </n-button>
+            </n-form>
+          </n-space>
+        </div>
+      </n-modal>
     </div>
   </div>
 </template>
@@ -648,6 +781,9 @@ import {
   NFormItem,
   NSelect,
   NDynamicTags,
+  NSlider,
+  NInputNumber,
+  NDivider,
   useMessage
 } from "naive-ui";
 import {
@@ -672,13 +808,16 @@ import {
   CreateOutline,
   DownloadOutline,
   StopOutline,
-  EllipsisVertical
+  EllipsisVertical,
+  SettingsOutline,
+  DocumentTextOutline
 } from "@vicons/ionicons5";
 import { aiMessageApi } from "../api/ai-message";
 import { websiteApi } from "../api/website";
 import { passwordApi } from "../api/password";
 import { snippetApi } from "../api/snippet";
 import { documentApi } from "../api/documents";
+import { promptTemplateApi } from "../api/prompt-templates";
 import MessageContent from "../components/MessageContent.vue";
 import { useData } from "../store/data";
 
@@ -721,6 +860,21 @@ const currentAgent = ref(null);
 const pendingData = ref({ type: "", data: {} });
 const addingData = ref(false);
 
+const templates = ref([]);
+const currentTemplate = ref(null);
+const showParamsModal = ref(false);
+const showTemplateModal = ref(false);
+const modelParams = ref({
+  temperature: 0.7,
+  max_tokens: 4096
+});
+const newTemplate = ref({
+  name: "",
+  category: "general",
+  content: "",
+  description: ""
+});
+
 const categories = ref([]);
 const folders = ref([]);
 
@@ -751,6 +905,29 @@ const categoryOptions = computed(() => {
 
 const folderOptions = computed(() => {
   return folders.value.map((f) => ({ label: f.name, value: f.id }));
+});
+
+const templateOptions = computed(() => {
+  const options = templates.value.map((t) => ({
+    label: t.name,
+    key: t.id,
+    icon: () => h("span", t.category === "coding" ? "💻" : t.category === "writing" ? "📝" : t.category === "translation" ? "🌐" : "🤖")
+  }));
+  options.push({ type: "divider" });
+  options.push({
+    label: "管理模板",
+    key: "manage",
+    icon: () => h(NIcon, null, { default: () => h(SettingsOutline) })
+  });
+  return options;
+});
+
+const templateCategoryOptions = computed(() => {
+  const cats = ["general", "coding", "writing", "translation", "analysis"];
+  return cats.map((c) => ({
+    label: c === "general" ? "通用" : c === "coding" ? "编程" : c === "writing" ? "写作" : c === "translation" ? "翻译" : "分析",
+    value: c
+  }));
 });
 
 const agentOptions = [
@@ -1147,7 +1324,7 @@ const sendMessage = async () => {
 
   try {
     const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
-    const systemPrompt = getAgentSystemPrompt();
+    const systemPrompt = getAgentSystemPrompt() || currentTemplate.value?.content || "";
 
     let aiContent = "";
     let aiReferences = [];
@@ -1174,7 +1351,9 @@ const sendMessage = async () => {
           })),
           stream: true,
           systemPrompt: systemPrompt || undefined,
-          continueFrom: continueFrom
+          continueFrom: continueFrom,
+          temperature: modelParams.value.temperature,
+          max_tokens: modelParams.value.max_tokens
         }),
         signal: abortController.value.signal
       });
@@ -1308,6 +1487,64 @@ const handleAgentSelect = (key) => {
   };
   currentAgent.value = agents[key];
   message.info(`已切换到「${agents[key].label}」智能体`);
+};
+
+const handleTemplateSelect = (key) => {
+  if (key === "manage") {
+    showTemplateModal.value = true;
+    return;
+  }
+  const template = templates.value.find((t) => t.id === key);
+  if (template) {
+    currentTemplate.value = template;
+    message.info(`已选择「${template.name}」模板`);
+  }
+};
+
+const selectTemplate = (template) => {
+  currentTemplate.value = template;
+  showTemplateModal.value = false;
+};
+
+const loadTemplates = async () => {
+  try {
+    const response = await promptTemplateApi.getAll();
+    templates.value = response.data.data || [];
+    const defaultTemplate = templates.value.find((t) => t.is_default);
+    if (defaultTemplate && !currentTemplate.value) {
+      currentTemplate.value = defaultTemplate;
+    }
+  } catch (error) {
+    console.error("加载模板失败:", error);
+  }
+};
+
+const createTemplate = async () => {
+  if (!newTemplate.value.name || !newTemplate.value.content) {
+    message.warning("请填写模板名称和内容");
+    return;
+  }
+  try {
+    await promptTemplateApi.create(newTemplate.value);
+    message.success("模板创建成功");
+    newTemplate.value = { name: "", category: "general", content: "", description: "" };
+    loadTemplates();
+  } catch (error) {
+    message.error("创建失败");
+  }
+};
+
+const deleteTemplate = async (id) => {
+  try {
+    await promptTemplateApi.delete(id);
+    message.success("删除成功");
+    if (currentTemplate.value?.id === id) {
+      currentTemplate.value = templates.value.find((t) => t.is_default) || null;
+    }
+    loadTemplates();
+  } catch (error) {
+    message.error(error.response?.data?.error || "删除失败");
+  }
 };
 
 const getAgentSystemPrompt = () => {
@@ -1539,6 +1776,7 @@ const confirmAddData = async () => {
 onMounted(() => {
   loadData();
   loadConversations();
+  loadTemplates();
   scrollToBottom();
 });
 </script>
@@ -1993,5 +2231,64 @@ onMounted(() => {
   margin-top: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--border-color);
+}
+
+.params-modal-content {
+  padding: 8px 0;
+}
+
+.params-tips {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--bg-color);
+  border-radius: 8px;
+}
+
+.template-modal-content {
+  padding: 8px 0;
+}
+
+.template-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.template-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid var(--border-color);
+}
+
+.template-item:hover {
+  background: var(--primary-light);
+  border-color: var(--primary-color);
+}
+
+.template-item.active {
+  background: var(--primary-light);
+  border-color: var(--primary-color);
+}
+
+.template-info {
+  flex: 1;
+}
+
+.template-name {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.template-desc {
+  font-size: 12px;
+  color: var(--text-color-3);
+  margin-top: 4px;
 }
 </style>

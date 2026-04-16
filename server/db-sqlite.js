@@ -130,6 +130,21 @@ export async function initSqlite() {
       model VARCHAR(100) NOT NULL,
       is_enabled INTEGER DEFAULT 1,
       is_default INTEGER DEFAULT 0,
+      temperature REAL DEFAULT 0.7,
+      max_tokens INTEGER DEFAULT 4096,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS prompt_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name VARCHAR(100) NOT NULL,
+      category VARCHAR(50) DEFAULT 'general',
+      content TEXT NOT NULL,
+      description TEXT,
+      is_default INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -172,7 +187,6 @@ export async function initSqlite() {
     const hasPinned = columns.some((col) => col.name === "pinned");
     if (!hasPinned) {
       db.run("ALTER TABLE code_snippets ADD COLUMN pinned INTEGER DEFAULT 0");
-      console.log("已添加 pinned 字段到 code_snippets 表");
     }
   } catch (e) {
     console.log("添加 pinned 字段时出错:", e.message);
@@ -188,12 +202,10 @@ export async function initSqlite() {
     const hasSearchUrl = columns.some((col) => col.name === "search_url");
     if (!hasSearchUrl) {
       db.run("ALTER TABLE websites ADD COLUMN search_url VARCHAR(500)");
-      console.log("已添加 search_url 字段到 websites 表");
     }
     const hasSortOrder = columns.some((col) => col.name === "sort_order");
     if (!hasSortOrder) {
       db.run("ALTER TABLE websites ADD COLUMN sort_order INTEGER DEFAULT 0");
-      console.log("已添加 sort_order 字段到 websites 表");
     }
   } catch (e) {
     console.log("添加 websites 字段时出错:", e.message);
@@ -209,7 +221,6 @@ export async function initSqlite() {
     const hasTitle = columns.some((col) => col.name === "title");
     if (!hasTitle) {
       db.run("ALTER TABLE ai_messages ADD COLUMN title VARCHAR(255)");
-      console.log("已添加 title 字段到 ai_messages 表");
     }
   } catch (e) {
     console.log("添加 ai_messages title 字段时出错:", e.message);
@@ -465,6 +476,43 @@ export async function initSqlite() {
     }
   } catch (e) {
     console.log("添加 ai_models 唯一约束时出错:", e.message);
+  }
+
+  try {
+    const stmt = db.prepare("PRAGMA table_info(ai_models)");
+    const columns = [];
+    while (stmt.step()) {
+      columns.push(stmt.getAsObject());
+    }
+    stmt.free();
+    const hasTemperature = columns.some((col) => col.name === "temperature");
+    if (!hasTemperature) {
+      db.run("ALTER TABLE ai_models ADD COLUMN temperature REAL DEFAULT 0.7");
+    }
+    const hasMaxTokens = columns.some((col) => col.name === "max_tokens");
+    if (!hasMaxTokens) {
+      db.run("ALTER TABLE ai_models ADD COLUMN max_tokens INTEGER DEFAULT 4096");
+    }
+  } catch (e) {
+    console.log("添加 ai_models 字段时出错:", e.message);
+  }
+
+  const defaultTemplates = [
+    { name: "通用助手", category: "general", content: "你是一个智能助手，可以帮助用户解答问题、提供建议和完成各种任务。请用中文回答问题，回答要简洁、准确、有帮助。", description: "适用于一般性问答和任务", is_default: 1 },
+    { name: "代码专家", category: "coding", content: "你是一个资深的编程专家，精通多种编程语言和框架。请用中文回答编程相关的问题，提供清晰的代码示例和详细的解释。代码要遵循最佳实践，包含必要的注释。", description: "适用于编程问题和技术咨询", is_default: 0 },
+    { name: "文档写作", category: "writing", content: "你是一个专业的文档写作助手，擅长撰写各类技术文档、教程和说明。请用中文撰写内容，确保结构清晰、语言流畅、格式规范。使用Markdown格式输出。", description: "适用于文档撰写和内容创作", is_default: 0 },
+    { name: "翻译助手", category: "translation", content: "你是一个专业的翻译助手，精通中文、英文、日文等多种语言。请准确翻译用户提供的内容，保持原文的语气和风格。如无特别说明，默认翻译为中文。", description: "适用于文本翻译", is_default: 0 },
+    { name: "数据分析", category: "analysis", content: "你是一个数据分析专家，擅长数据处理、统计分析和可视化。请用中文回答数据分析相关的问题，提供清晰的分析思路和具体的操作步骤。", description: "适用于数据分析和处理", is_default: 0 },
+    { name: "SQL专家", category: "coding", content: "你是一个SQL数据库专家，精通各种数据库系统。请用中文回答SQL相关的问题，提供优化的SQL语句和详细的解释。注意SQL注入防护和性能优化。", description: "适用于SQL查询和数据库问题", is_default: 0 }
+  ];
+
+  for (const template of defaultTemplates) {
+    const existing = queryOne("SELECT id FROM prompt_templates WHERE name = ?", [template.name]);
+    if (!existing) {
+      db.run("INSERT INTO prompt_templates (name, category, content, description, is_default) VALUES (?, ?, ?, ?, ?)", [
+        template.name, template.category, template.content, template.description, template.is_default
+      ]);
+    }
   }
 
   const defaultSettings = [
