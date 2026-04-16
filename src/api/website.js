@@ -21,5 +21,7 @@ export const websiteApi = {
   
   filterApps: (apps) => api.post('/websites/filter-apps', { apps }),
   
-  clearAll: () => api.delete('/websites/clear/all')
+  clearAll: () => api.delete('/websites/clear/all'),
+  
+  reorder: (orders) => api.post('/websites/reorder', { orders })
 }

@@ -7,7 +7,7 @@ const router = express.Router()
 
 router.get('/', async (req, res) => {
   try {
-    const rows = await query('SELECT * FROM websites ORDER BY created_at DESC')
+    const rows = await query('SELECT * FROM websites ORDER BY sort_order ASC, created_at DESC')
     res.json({ data: rows })
   } catch (error) {
     res.status(500).json({ error: error.message })
@@ -402,6 +402,23 @@ router.post('/filter-apps', async (req, res) => {
 router.delete('/clear/all', async (req, res) => {
   try {
     await execute('DELETE FROM websites')
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.post('/reorder', async (req, res) => {
+  const { orders } = req.body
+  try {
+    if (!Array.isArray(orders)) {
+      return res.status(400).json({ error: 'orders 必须是数组' })
+    }
+    
+    for (const item of orders) {
+      await execute('UPDATE websites SET sort_order = ? WHERE id = ?', [item.sort_order, item.id])
+    }
+    
     res.json({ success: true })
   } catch (error) {
     res.status(500).json({ error: error.message })

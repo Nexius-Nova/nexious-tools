@@ -10,7 +10,6 @@ import settingsRouter from './routes/settings.js'
 import aiRouter from './routes/ai.js'
 import aiModelsRouter from './routes/ai-models.js'
 import aiMessagesRouter from './routes/ai-messages.js'
-import clipboardRouter from './routes/clipboard.js'
 import documentsRouter from './routes/documents.js'
 import docFoldersRouter from './routes/doc-folders.js'
 import uploadsRouter from './routes/uploads.js'
@@ -48,7 +47,6 @@ app.use('/api/settings', settingsRouter)
 app.use('/api/ai', aiRouter)
 app.use('/api/ai-models', aiModelsRouter)
 app.use('/api/ai-messages', aiMessagesRouter)
-app.use('/api/clipboard', clipboardRouter)
 app.use('/api/documents', documentsRouter)
 app.use('/api/doc-folders', docFoldersRouter)
 app.use('/api/upload', uploadsRouter)

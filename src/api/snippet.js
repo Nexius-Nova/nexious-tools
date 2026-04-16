@@ -5,6 +5,8 @@ export const snippetApi = {
   
   getCategories: () => api.get('/snippets/categories'),
   
+  getTags: () => api.get('/snippets/tags'),
+  
   createCategory: (name) => api.post('/snippets/categories', { name }),
   
   updateCategory: (id, name) => api.put(`/snippets/categories/${id}`, { name }),

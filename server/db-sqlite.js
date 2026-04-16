@@ -53,6 +53,7 @@ export async function initSqlite() {
       app_path VARCHAR(500),
       type VARCHAR(20) DEFAULT 'website',
       search_url VARCHAR(500),
+      sort_order INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -104,6 +105,7 @@ export async function initSqlite() {
       role VARCHAR(20) NOT NULL,
       content TEXT NOT NULL,
       refs TEXT,
+      title VARCHAR(255),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -128,19 +130,6 @@ export async function initSqlite() {
       model VARCHAR(100) NOT NULL,
       is_enabled INTEGER DEFAULT 1,
       is_default INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS clipboard_history (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      content TEXT NOT NULL,
-      content_type VARCHAR(20) DEFAULT 'text',
-      source_app VARCHAR(255),
-      is_favorite INTEGER DEFAULT 0,
-      copy_count INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -201,8 +190,29 @@ export async function initSqlite() {
       db.run("ALTER TABLE websites ADD COLUMN search_url VARCHAR(500)");
       console.log("已添加 search_url 字段到 websites 表");
     }
+    const hasSortOrder = columns.some((col) => col.name === "sort_order");
+    if (!hasSortOrder) {
+      db.run("ALTER TABLE websites ADD COLUMN sort_order INTEGER DEFAULT 0");
+      console.log("已添加 sort_order 字段到 websites 表");
+    }
   } catch (e) {
-    console.log("添加 search_url 字段时出错:", e.message);
+    console.log("添加 websites 字段时出错:", e.message);
+  }
+
+  try {
+    const stmt = db.prepare("PRAGMA table_info(ai_messages)");
+    const columns = [];
+    while (stmt.step()) {
+      columns.push(stmt.getAsObject());
+    }
+    stmt.free();
+    const hasTitle = columns.some((col) => col.name === "title");
+    if (!hasTitle) {
+      db.run("ALTER TABLE ai_messages ADD COLUMN title VARCHAR(255)");
+      console.log("已添加 title 字段到 ai_messages 表");
+    }
+  } catch (e) {
+    console.log("添加 ai_messages title 字段时出错:", e.message);
   }
 
   // ========== 添加唯一性约束迁移 ==========
@@ -231,6 +241,7 @@ export async function initSqlite() {
           app_path VARCHAR(500),
           type VARCHAR(20) DEFAULT 'website',
           search_url VARCHAR(500),
+          sort_order INTEGER DEFAULT 0,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           CONSTRAINT idx_websites_type_name UNIQUE(type, name)
@@ -238,8 +249,8 @@ export async function initSqlite() {
       `);
 
       db.run(`
-        INSERT INTO websites_new (id, name, url, alias, favicon, description, app_path, type, search_url, created_at, updated_at)
-        SELECT id, name, url, alias, favicon, description, app_path, type, search_url, created_at, updated_at
+        INSERT INTO websites_new (id, name, url, alias, favicon, description, app_path, type, search_url, sort_order, created_at, updated_at)
+        SELECT id, name, url, alias, favicon, description, app_path, type, search_url, sort_order, created_at, updated_at
         FROM websites 
         WHERE id IN (
           SELECT MIN(id) FROM websites GROUP BY type, name
@@ -250,7 +261,6 @@ export async function initSqlite() {
       db.run("ALTER TABLE websites_new RENAME TO websites");
       
       db.run(`CREATE INDEX IF NOT EXISTS idx_websites_type_url ON websites(type, url) WHERE url IS NOT NULL`);
-      console.log("websites 表约束修复完成");
     }
   } catch (e) {
     console.log("修复 websites 表约束时出错:", e.message);

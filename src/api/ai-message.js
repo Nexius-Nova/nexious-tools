@@ -8,5 +8,6 @@ export const aiMessageApi = {
   getConversations: () => api.get('/ai-messages/conversations'),
   getConversation: (conversationId) => api.get(`/ai-messages/conversations/${conversationId}`),
   saveMessage: (data) => api.post('/ai-messages/messages', data),
-  deleteConversation: (conversationId) => api.delete(`/ai-messages/conversations/${conversationId}`)
+  deleteConversation: (conversationId) => api.delete(`/ai-messages/conversations/${conversationId}`),
+  updateConversationTitle: (conversationId, title) => api.put(`/ai-messages/conversations/${conversationId}/title`, { title })
 }

@@ -117,11 +117,17 @@ const isResizing = ref(false)
 const headings = computed(() => {
   if (!props.content) return []
   
+  let content = props.content
+  
+  content = content.replace(/```[\s\S]*?```/g, '')
+  content = content.replace(/~~~[\s\S]*?~~~/g, '')
+  content = content.replace(/`[^`]+`/g, '')
+  
   const regex = /^(#{1,6})\s+(.+)$/gm
   const result = []
   let match
   
-  while ((match = regex.exec(props.content)) !== null) {
+  while ((match = regex.exec(content)) !== null) {
     result.push({
       level: match[1].length,
       text: match[2].trim(),

@@ -16,8 +16,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getGlobalShortcut: () => ipcRenderer.invoke('get-global-shortcut'),
   setAutoLaunch: (enable) => ipcRenderer.invoke('set-auto-launch', enable),
   getAutoLaunch: () => ipcRenderer.invoke('get-auto-launch'),
-  startClipboardWatcher: () => ipcRenderer.invoke('start-clipboard-watcher'),
-  stopClipboardWatcher: () => ipcRenderer.invoke('stop-clipboard-watcher'),
   importBrowserBookmarks: () => ipcRenderer.invoke('import-browser-bookmarks'),
   getBrowserBookmarksPath: () => ipcRenderer.invoke('get-browser-bookmarks-path'),
   onWindowRestored: (callback) => {

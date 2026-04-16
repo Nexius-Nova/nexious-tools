@@ -30,12 +30,6 @@
               Ctrl+Shift+Space)
             </n-text>
           </n-form>
-
-          <n-space>
-            <n-button type="primary" @click="saveShortcut">
-              保存快捷键
-            </n-button>
-          </n-space>
         </n-space>
       </n-card>
 
@@ -239,7 +233,7 @@
         </template>
         <n-space vertical>
           <n-text depth="3" style="margin-bottom: 16px">
-            导出或导入应用数据，包含网站、密码、代码片段、文档、剪贴板、AI模型配置等所有数据
+            导出或导入应用数据，包含网站、密码、代码片段、文档、AI模型配置等所有数据
           </n-text>
 
           <n-space>
@@ -340,7 +334,6 @@ import { passwordApi } from "../api/password";
 import { snippetApi } from "../api/snippet";
 import { documentApi } from "../api/documents";
 import { docFolderApi } from "../api/doc-folders";
-import { clipboardApi } from "../api/clipboard";
 import { aiModelsApi } from "../api/ai-models";
 
 const message = useMessage();
@@ -642,6 +635,7 @@ const handleShortcutKeydown = (e) => {
 
   if (modifiers.length > 0) {
     settings.global_shortcut = [...modifiers, key].join("+");
+    saveShortcut();
   }
 };
 
@@ -864,7 +858,6 @@ const exportData = async () => {
       snippets,
       documents,
       docFolders,
-      clipboards,
       aiModelsData,
       appSettings
     ] = await Promise.all([
@@ -873,7 +866,6 @@ const exportData = async () => {
       snippetApi.getAll(),
       documentApi.getAll(),
       docFolderApi.getFlat(),
-      clipboardApi.getAll(),
       aiModelsApi.getAll(),
       settingsApi.getAll()
     ]);
@@ -887,7 +879,6 @@ const exportData = async () => {
         snippets: snippets.data.data || [],
         documents: documents.data.data || [],
         docFolders: docFolders.data.data || [],
-        clipboards: clipboards.data.data || [],
         aiModels: aiModelsData.data.data || [],
         settings: appSettings.data.data || {}
       }
@@ -916,101 +907,158 @@ const triggerImport = () => {
   fileInput.value?.click();
 };
 
+const importMode = ref("merge");
+
 const handleFileSelect = async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  importing.value = true;
   try {
     const text = await file.text();
     const importPayload = JSON.parse(text);
 
     if (!importPayload.version || !importPayload.data) {
       message.error("无效的备份文件格式");
+      event.target.value = "";
       return;
     }
 
-    dialog.warning({
-      title: "确认导入",
-      content: "导入数据将覆盖现有数据，是否继续？",
-      positiveText: "导入",
-      negativeText: "取消",
+    const data = importPayload.data;
+    const stats = {
+      websites: data.websites?.length || 0,
+      passwords: data.passwords?.length || 0,
+      snippets: data.snippets?.length || 0,
+      documents: data.documents?.length || 0,
+      aiModels: data.aiModels?.length || 0
+    };
+
+    dialog.info({
+      title: "选择导入方式",
+      content: `检测到备份文件包含：网站 ${stats.websites} 个、密码 ${stats.passwords} 个、代码片段 ${stats.snippets} 个、文档 ${stats.documents} 个、AI模型 ${stats.aiModels} 个`,
+      positiveText: "覆盖导入",
+      negativeText: "增量导入",
       onPositiveClick: async () => {
-        try {
-          const data = importPayload.data;
-
-          await Promise.all([
-            websiteApi.clearAll(),
-            passwordApi.clearAll(),
-            snippetApi.clearAll(),
-            documentApi.clearAll(),
-            clipboardApi.clearAll(),
-            aiModelsApi.clearAll()
-          ]);
-
-          if (data.websites?.length) {
-            for (const item of data.websites) {
-              await websiteApi.create(item);
-            }
-          }
-
-          if (data.passwords?.length) {
-            for (const item of data.passwords) {
-              await passwordApi.create(item);
-            }
-          }
-
-          if (data.snippets?.length) {
-            for (const item of data.snippets) {
-              await snippetApi.create(item);
-            }
-          }
-
-          if (data.documents?.length) {
-            for (const item of data.documents) {
-              await documentApi.create(item);
-            }
-          }
-
-          if (data.docFolders?.length) {
-            for (const item of data.docFolders) {
-              await docFolderApi.create(item);
-            }
-          }
-
-          if (data.clipboards?.length) {
-            for (const item of data.clipboards) {
-              await clipboardApi.create(item);
-            }
-          }
-
-          if (data.aiModels?.length) {
-            for (const item of data.aiModels) {
-              await aiModelsApi.create(item);
-            }
-          }
-
-          if (data.settings) {
-            for (const [key, value] of Object.entries(data.settings)) {
-              await settingsApi.set(key, value);
-            }
-          }
-
-          message.success("数据导入成功");
-          loadSettings();
-          loadAiModels();
-        } catch (error) {
-          console.error("导入数据失败:", error);
-          message.error("导入失败");
-        }
+        await doImport(data, "overwrite");
+      },
+      onNegativeClick: async () => {
+        await doImport(data, "merge");
       }
     });
   } catch (error) {
     console.error("读取文件失败:", error);
     message.error("读取文件失败");
   } finally {
-    importing.value = false;
     event.target.value = "";
+  }
+};
+
+const doImport = async (data, mode) => {
+  importing.value = true;
+  try {
+    if (mode === "overwrite") {
+      await Promise.all([
+        websiteApi.clearAll(),
+        passwordApi.clearAll(),
+        snippetApi.clearAll(),
+        documentApi.clearAll(),
+        aiModelsApi.clearAll()
+      ]);
+    }
+
+    if (data.websites?.length) {
+      for (const item of data.websites) {
+        if (mode === "merge") {
+          const existing = await websiteApi.getById(item.id).catch(() => null);
+          if (existing?.data?.data) {
+            await websiteApi.update(item.id, item);
+          } else {
+            await websiteApi.create(item);
+          }
+        } else {
+          await websiteApi.create(item);
+        }
+      }
+    }
+
+    if (data.passwords?.length) {
+      for (const item of data.passwords) {
+        if (mode === "merge") {
+          const existing = await passwordApi.getById(item.id).catch(() => null);
+          if (existing?.data?.data) {
+            await passwordApi.update(item.id, item);
+          } else {
+            await passwordApi.create(item);
+          }
+        } else {
+          await passwordApi.create(item);
+        }
+      }
+    }
+
+    if (data.snippets?.length) {
+      for (const item of data.snippets) {
+        if (mode === "merge") {
+          const existing = await snippetApi.getById(item.id).catch(() => null);
+          if (existing?.data?.data) {
+            await snippetApi.update(item.id, item);
+          } else {
+            await snippetApi.create(item);
+          }
+        } else {
+          await snippetApi.create(item);
+        }
+      }
+    }
+
+    if (data.documents?.length) {
+      for (const item of data.documents) {
+        if (mode === "merge") {
+          const existing = await documentApi.getById(item.id).catch(() => null);
+          if (existing?.data?.data) {
+            await documentApi.update(item.id, item);
+          } else {
+            await documentApi.create(item);
+          }
+        } else {
+          await documentApi.create(item);
+        }
+      }
+    }
+
+    if (data.docFolders?.length) {
+      for (const item of data.docFolders) {
+        await docFolderApi.create(item);
+      }
+    }
+
+    if (data.aiModels?.length) {
+      for (const item of data.aiModels) {
+        if (mode === "merge") {
+          try {
+            await aiModelsApi.update(item.id, item);
+          } catch {
+            await aiModelsApi.create(item);
+          }
+        } else {
+          await aiModelsApi.create(item);
+        }
+      }
+    }
+
+    if (data.settings) {
+      for (const [key, value] of Object.entries(data.settings)) {
+        await settingsApi.set(key, value);
+      }
+    }
+
+    message.success(mode === "overwrite" ? "数据覆盖导入成功" : "数据增量导入成功");
+    loadSettings();
+    loadAiModels();
+  } catch (error) {
+    console.error("导入数据失败:", error);
+    message.error("导入失败");
+  } finally {
+    importing.value = false;
   }
 };
 
