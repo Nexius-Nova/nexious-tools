@@ -69,7 +69,17 @@
       :y-gap="16"
       responsive="screen"
     >
-      <n-grid-item v-for="item in filteredItems" :key="item.id">
+      <n-grid-item 
+        v-for="(item, index) in filteredItems" 
+        :key="item.id"
+        draggable="true"
+        @dragstart="handleDragStart($event, index)"
+        @dragover.prevent="handleDragOver($event, index)"
+        @dragleave="handleDragLeave"
+        @drop.prevent="handleDrop($event, index)"
+        @dragend="handleDragEnd"
+        :class="{ 'dragging': dragIndex === index, 'drag-over': dragOverIndex === index }"
+      >
         <n-card hoverable class="website-card">
           <template #header>
             <n-space align="center">
@@ -543,7 +553,7 @@ const searchQuery = ref("");
 const showModal = ref(false);
 const editingItem = ref(null);
 const viewMode = ref("card");
-const activeTab = ref("all");
+const activeTab = ref("website");
 const editingRowKey = ref(null);
 const editingData = ref({});
 const scanning = ref(false);
@@ -558,6 +568,8 @@ const showBookmarkModal = ref(false);
 const scannedBookmarks = ref([]);
 const selectedBookmarks = ref([]);
 const bookmarkSearchQuery = ref("");
+const dragIndex = ref(-1);
+const dragOverIndex = ref(-1);
 
 const filteredScannedApps = computed(() => {
   if (!appSearchQuery.value) return scannedApps.value;
@@ -1281,6 +1293,54 @@ const getBookmarkFavicon = (url) => {
   return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
 };
 
+const handleDragStart = (e, index) => {
+  dragIndex.value = index;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', index.toString());
+};
+
+const handleDragOver = (e, index) => {
+  if (dragIndex.value !== index) {
+    dragOverIndex.value = index;
+  }
+};
+
+const handleDragLeave = () => {
+  dragOverIndex.value = -1;
+};
+
+const handleDrop = async (e, targetIndex) => {
+  const sourceIndex = dragIndex.value;
+  if (sourceIndex === targetIndex) {
+    return;
+  }
+  
+  const items = [...filteredItems.value];
+  const [movedItem] = items.splice(sourceIndex, 1);
+  items.splice(targetIndex, 0, movedItem);
+  
+  const orders = items.map((item, idx) => ({
+    id: item.id,
+    sort_order: idx
+  }));
+  
+  try {
+    await websiteApi.reorder(orders);
+    await loadItems();
+    message.success('排序已更新');
+  } catch (error) {
+    console.error('更新排序失败:', error);
+    message.error('更新排序失败');
+  }
+  
+  dragOverIndex.value = -1;
+};
+
+const handleDragEnd = () => {
+  dragIndex.value = -1;
+  dragOverIndex.value = -1;
+};
+
 onMounted(() => {
   loadItems();
 });
@@ -1302,6 +1362,18 @@ onMounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
+  max-width: 350px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.dragging .website-card {
+  opacity: 0.5;
+  transform: scale(0.98);
+}
+
+.drag-over .website-card {
+  border: 2px dashed var(--primary-color, #667eea);
+  transform: scale(1.02);
 }
 
 .website-card :deep(.n-card__content) {

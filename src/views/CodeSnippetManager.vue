@@ -37,94 +37,126 @@
     </div>
 
     <div class="three-column-layout">
-      <div class="column category-column">
-        <div class="column-header">
-          <n-text strong>分类</n-text>
-          <n-button
-            text
-            size="small"
-            @click="showAddCategoryInput = true"
-            v-if="!showAddCategoryInput"
-          >
-            <template #icon>
-              <n-icon size="16"><AddOutline /></n-icon>
-            </template>
-          </n-button>
-        </div>
-        <div class="column-content">
-          <div
-            :class="['category-item', { active: selectedCategory === null, 'drag-over': dragOverCategory === 'all' }]"
-            @click="selectedCategory = null"
-            @dragover.prevent="dragOverCategory = 'all'"
-            @dragleave="dragOverCategory = null"
-            @drop.prevent="handleDropToCategory($event, null)"
-          >
-            <n-icon size="16"><AppsOutline /></n-icon>
-            <span>全部</span>
-          </div>
-          <div
-            v-for="category in categories"
-            :key="category.id"
-            :class="[
-              'category-item',
-              { active: selectedCategory === category.name, 'drag-over': dragOverCategory === category.name, 'editing': editingCategoryId === category.id }
-            ]"
-            @click="selectedCategory = category.name"
-            @dragover.prevent="dragOverCategory = category.name"
-            @dragleave="dragOverCategory = null"
-            @drop.prevent="handleDropToCategory($event, category.name)"
-            @dblclick="startEditCategory(category)"
-          >
-            <n-icon size="16"><FolderOutline /></n-icon>
-            <template v-if="editingCategoryId === category.id">
-              <n-input
-                v-model:value="editingCategoryName"
-                size="small"
-                style="flex: 1"
-                @keydown.enter="saveCategoryName(category)"
-                @keydown.escape="cancelEditCategory"
-                @blur="handleCategoryInputBlur(category)"
-                ref="categoryInputRef"
-                autofocus
-              />
-            </template>
-            <template v-else>
-              <span>{{ category.name }}</span>
-            </template>
-            <n-button
-              v-if="editingCategoryId !== category.id"
-              text
-              size="tiny"
-              class="edit-category-btn"
-              @click.stop="startEditCategory(category)"
-            >
-              <template #icon>
-                <n-icon size="12"><CreateOutline /></n-icon>
-              </template>
-            </n-button>
+      <div class="column sidebar-column">
+        <div class="column category-column">
+          <div class="column-header">
+            <n-text strong>分类</n-text>
             <n-button
               text
-              size="tiny"
-              class="delete-category-btn"
-              @click.stop="deleteCategory(category)"
-            >
-              <template #icon>
-                <n-icon size="12"><CloseOutline /></n-icon>
-              </template>
-            </n-button>
-          </div>
-          <div v-if="showAddCategoryInput" class="add-category-input">
-            <n-input
-              v-model:value="newCategoryName"
-              placeholder="输入分类名称"
               size="small"
-              @keydown.enter="addCategory"
-              @keydown.escape="cancelAddCategory"
-            />
-            <n-space :size="4" style="margin-top: 8px">
-              <n-button size="small" type="primary" @click="addCategory">确定</n-button>
-              <n-button size="small" @click="cancelAddCategory">取消</n-button>
-            </n-space>
+              @click="showAddCategoryInput = true"
+              v-if="!showAddCategoryInput"
+            >
+              <template #icon>
+                <n-icon size="16"><AddOutline /></n-icon>
+              </template>
+            </n-button>
+          </div>
+          <div class="column-content">
+            <div
+              :class="['category-item', { active: selectedCategory === null, 'drag-over': dragOverCategory === 'all' }]"
+              @click="selectedCategory = null"
+              @dragover.prevent="dragOverCategory = 'all'"
+              @dragleave="dragOverCategory = null"
+              @drop.prevent="handleDropToCategory($event, null)"
+            >
+              <n-icon size="16"><AppsOutline /></n-icon>
+              <span>全部</span>
+            </div>
+            <div
+              v-for="category in categories"
+              :key="category.id"
+              :class="[
+                'category-item',
+                { active: selectedCategory === category.name, 'drag-over': dragOverCategory === category.name, 'editing': editingCategoryId === category.id }
+              ]"
+              @click="selectedCategory = category.name"
+              @dragover.prevent="dragOverCategory = category.name"
+              @dragleave="dragOverCategory = null"
+              @drop.prevent="handleDropToCategory($event, category.name)"
+              @dblclick="startEditCategory(category)"
+            >
+              <n-icon size="16"><FolderOutline /></n-icon>
+              <template v-if="editingCategoryId === category.id">
+                <n-input
+                  v-model:value="editingCategoryName"
+                  size="small"
+                  style="flex: 1"
+                  @keydown.enter="saveCategoryName(category)"
+                  @keydown.escape="cancelEditCategory"
+                  @blur="handleCategoryInputBlur(category)"
+                  ref="categoryInputRef"
+                  autofocus
+                />
+              </template>
+              <template v-else>
+                <span>{{ category.name }}</span>
+              </template>
+              <n-button
+                v-if="editingCategoryId !== category.id"
+                text
+                size="tiny"
+                class="edit-category-btn"
+                @click.stop="startEditCategory(category)"
+              >
+                <template #icon>
+                  <n-icon size="12"><CreateOutline /></n-icon>
+                </template>
+              </n-button>
+              <n-button
+                text
+                size="tiny"
+                class="delete-category-btn"
+                @click.stop="deleteCategory(category)"
+              >
+                <template #icon>
+                  <n-icon size="12"><CloseOutline /></n-icon>
+                </template>
+              </n-button>
+            </div>
+            <div v-if="showAddCategoryInput" class="add-category-input">
+              <n-input
+                v-model:value="newCategoryName"
+                placeholder="输入分类名称"
+                size="small"
+                @keydown.enter="addCategory"
+                @keydown.escape="cancelAddCategory"
+              />
+              <n-space :size="4" style="margin-top: 8px">
+                <n-button size="small" type="primary" @click="addCategory">确定</n-button>
+                <n-button size="small" @click="cancelAddCategory">取消</n-button>
+              </n-space>
+            </div>
+          </div>
+        </div>
+
+        <div class="column tag-column" v-if="tags.length > 0">
+          <div class="column-header">
+            <n-text strong>标签</n-text>
+            <n-button
+              v-if="selectedTag"
+              text
+              size="small"
+              @click="selectedTag = null"
+            >
+              清除
+            </n-button>
+          </div>
+          <div class="column-content">
+            <div class="tag-list">
+              <n-tag
+                v-for="tag in tags"
+                :key="tag"
+                :type="selectedTag === tag ? 'primary' : 'default'"
+                :bordered="selectedTag === tag"
+                size="small"
+                round
+                class="tag-item"
+                @click="selectedTag = selectedTag === tag ? null : tag"
+              >
+                {{ tag }}
+              </n-tag>
+            </div>
           </div>
         </div>
       </div>
@@ -283,12 +315,6 @@
                   size="small"
                   style="width: 120px"
                 />
-                <n-button size="small" @click="copyCode">
-                  <template #icon>
-                    <n-icon><CopyOutline /></n-icon>
-                  </template>
-                  复制代码
-                </n-button>
               </div>
               <n-card embedded class="code-card">
                 <MonacoEditor
@@ -371,9 +397,11 @@ const dialog = useDialog();
 const { snippets, reloadSnippets, addSnippet, updateSnippet, removeSnippet } = useData();
 
 const categories = ref([]);
+const tags = ref([]);
 const searchQuery = ref("");
 const useRegexSearch = ref(false);
 const selectedCategory = ref(null);
+const selectedTag = ref(null);
 const selectedSnippet = ref(null);
 const showModal = ref(false);
 const editingSnippet = ref(null);
@@ -469,6 +497,10 @@ const filteredSnippets = computed(() => {
     result = result.filter((s) => s.category === selectedCategory.value);
   }
 
+  if (selectedTag.value) {
+    result = result.filter((s) => s.tags && s.tags.includes(selectedTag.value));
+  }
+
   if (searchQuery.value) {
     try {
       if (useRegexSearch.value) {
@@ -503,7 +535,7 @@ const selectSnippet = (snippet) => {
 };
 
 const loadData = async () => {
-  await Promise.all([loadSnippets(), loadCategories()]);
+  await Promise.all([loadSnippets(), loadCategories(), loadTags()]);
 };
 
 const loadSnippets = async (skipAutoSelect = false) => {
@@ -524,6 +556,15 @@ const loadCategories = async () => {
     categories.value = response.data.data || [];
   } catch (error) {
     console.error("加载分类失败:", error);
+  }
+};
+
+const loadTags = async () => {
+  try {
+    const response = await snippetApi.getTags();
+    tags.value = response.data.data || [];
+  } catch (error) {
+    console.error("加载标签失败:", error);
   }
 };
 
@@ -560,6 +601,7 @@ const handleSave = async (data) => {
     closeModal();
     await loadSnippets();
     await loadCategories();
+    await loadTags();
   } catch (error) {
     console.error("保存代码片段失败:", error);
     message.error("保存失败，请重试");
@@ -791,8 +833,46 @@ onMounted(async () => {
 }
 
 .category-column {
+  flex-shrink: 0;
+}
+
+.sidebar-column {
   width: 180px;
   min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.sidebar-column .category-column {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+.sidebar-column .tag-column {
+  flex: 1;
+  min-height: 0;
+  border-top: none;
+}
+
+.tag-column {
+  flex-shrink: 0;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px;
+}
+
+.tag-item {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tag-item:hover {
+  transform: scale(1.05);
 }
 
 .snippet-list-column {

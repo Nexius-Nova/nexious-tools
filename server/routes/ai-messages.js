@@ -7,7 +7,8 @@ router.get('/conversations', async (req, res) => {
   try {
     const rows = await query(`
       SELECT DISTINCT conversation_id, MIN(created_at) as started_at, 
-             (SELECT content FROM ai_messages m2 WHERE m2.conversation_id = m1.conversation_id AND m2.role = 'user' ORDER BY created_at ASC LIMIT 1) as first_message
+             (SELECT content FROM ai_messages m2 WHERE m2.conversation_id = m1.conversation_id AND m2.role = 'user' ORDER BY created_at ASC LIMIT 1) as first_message,
+             (SELECT title FROM ai_messages m3 WHERE m3.conversation_id = m1.conversation_id AND m3.title IS NOT NULL LIMIT 1) as title
       FROM ai_messages m1
       GROUP BY conversation_id
       ORDER BY started_at DESC
@@ -68,6 +69,32 @@ router.post('/messages', async (req, res) => {
 router.delete('/conversations/:conversationId', async (req, res) => {
   try {
     await execute('DELETE FROM ai_messages WHERE conversation_id = ?', [req.params.conversationId])
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.put('/conversations/:conversationId/title', async (req, res) => {
+  const { title } = req.body
+  try {
+    const existing = await queryOne(
+      'SELECT id FROM ai_messages WHERE conversation_id = ? AND title IS NOT NULL',
+      [req.params.conversationId]
+    )
+    
+    if (existing) {
+      await execute('UPDATE ai_messages SET title = ? WHERE conversation_id = ? AND title IS NOT NULL', [title, req.params.conversationId])
+    } else {
+      const firstMsg = await queryOne(
+        'SELECT id FROM ai_messages WHERE conversation_id = ? ORDER BY created_at ASC LIMIT 1',
+        [req.params.conversationId]
+      )
+      if (firstMsg) {
+        await execute('UPDATE ai_messages SET title = ? WHERE id = ?', [title, firstMsg.id])
+      }
+    }
+    
     res.json({ success: true })
   } catch (error) {
     res.status(500).json({ error: error.message })

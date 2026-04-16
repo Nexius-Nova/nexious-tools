@@ -26,6 +26,24 @@ router.get('/categories', async (req, res) => {
   }
 })
 
+router.get('/tags', async (req, res) => {
+  try {
+    const rows = await query('SELECT tags FROM code_snippets WHERE tags IS NOT NULL')
+    const allTags = new Set()
+    rows.forEach(row => {
+      try {
+        const tags = JSON.parse(row.tags)
+        if (Array.isArray(tags)) {
+          tags.forEach(tag => allTags.add(tag))
+        }
+      } catch (e) {}
+    })
+    res.json({ data: Array.from(allTags).sort() })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
 router.post('/categories', async (req, res) => {
   const { name } = req.body
   if (!name || !name.trim()) {

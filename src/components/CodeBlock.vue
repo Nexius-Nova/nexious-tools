@@ -70,6 +70,7 @@ const languageOptions = [
   { label: 'Python', value: 'python' },
   { label: 'Java', value: 'java' },
   { label: 'C#', value: 'csharp' },
+  { label: 'C', value: 'c' },
   { label: 'C++', value: 'cpp' },
   { label: 'Go', value: 'go' },
   { label: 'Rust', value: 'rust' },

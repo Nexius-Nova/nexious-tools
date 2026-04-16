@@ -107,8 +107,8 @@
         </n-descriptions-item>
         <n-descriptions-item label="密码">
           <n-space align="center">
-            <n-text code>{{ decryptedPassword }}</n-text>
-            <n-button size="small" @click="copyToClipboard(decryptedPassword)">
+            <n-text code>{{ viewingPassword?.password }}</n-text>
+            <n-button size="small" @click="copyToClipboard(viewingPassword?.password)">
               复制
             </n-button>
           </n-space>
@@ -160,7 +160,6 @@ const showModal = ref(false)
 const editingPassword = ref(null)
 const showPasswordViewer = ref(false)
 const viewingPassword = ref(null)
-const decryptedPassword = ref('')
 
 const filteredPasswords = computed(() => {
   if (!searchQuery.value) return passwords.value
@@ -196,10 +195,11 @@ const closeModal = () => {
 }
 
 const handleSave = async (data) => {
+  const editingId = editingPassword.value?.id
   try {
-    if (editingPassword.value?.id) {
-      await passwordApi.update(editingPassword.value.id, data)
-      updatePassword(editingPassword.value.id, data)
+    if (editingId) {
+      await passwordApi.update(editingId, data)
+      updatePassword(editingId, data)
       message.success('更新成功')
     } else {
       const response = await passwordApi.create(data)
@@ -236,27 +236,13 @@ const deletePassword = (item) => {
   })
 }
 
-const viewPassword = async (item) => {
-  try {
-    const response = await passwordApi.decrypt(item.id)
-    viewingPassword.value = item
-    decryptedPassword.value = response.data.data?.password || ''
-    showPasswordViewer.value = true
-  } catch (error) {
-    console.error('解密密码失败:', error)
-    message.error('解密失败，请重试')
-  }
+const viewPassword = (item) => {
+  viewingPassword.value = item
+  showPasswordViewer.value = true
 }
 
 const copyPassword = async (item) => {
-  try {
-    const response = await passwordApi.decrypt(item.id)
-    const password = response.data.data?.password || ''
-    await copyToClipboard(password)
-  } catch (error) {
-    console.error('复制密码失败:', error)
-    message.error('复制失败')
-  }
+  await copyToClipboard(item.password)
 }
 
 const copyToClipboard = async (text) => {

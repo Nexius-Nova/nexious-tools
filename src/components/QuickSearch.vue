@@ -57,6 +57,7 @@
             />
             <n-icon v-else-if="item.type === 'password'" size="20"><KeyOutline /></n-icon>
             <n-icon v-else-if="item.type === 'document'" size="20"><DocumentOutline /></n-icon>
+            <n-icon v-else-if="item.type === 'default-search'" size="20"><SearchOutline /></n-icon>
             <n-icon v-else size="20"><CodeSlashOutline /></n-icon>
           </div>
           <div class="result-info">
@@ -83,7 +84,7 @@
         </n-descriptions-item>
         <n-descriptions-item label="密码">
           <n-space align="center">
-            <n-text code>{{ showPassword ? decryptedPassword : '••••••••' }}</n-text>
+            <n-text code>{{ showPassword ? detailItem.password : '••••••••' }}</n-text>
             <n-button size="small" @click="togglePassword">
               {{ showPassword ? '隐藏' : '显示' }}
             </n-button>
@@ -150,7 +151,6 @@ const loading = ref(false)
 
 const showDetail = ref(false)
 const detailItem = ref(null)
-const decryptedPassword = ref('')
 const showPassword = ref(false)
 
 const truncateUrl = (url, maxLength = 40) => {
@@ -263,7 +263,7 @@ const filteredResults = computed(() => {
   })
   
   documents.value.forEach(d => {
-    if (d.title?.toLowerCase().includes(searchPrefix) || d.content?.toLowerCase().includes(searchPrefix)) {
+    if (d.title?.toLowerCase().includes(searchPrefix)) {
       results.push({
         ...d,
         type: 'document',
@@ -273,6 +273,17 @@ const filteredResults = computed(() => {
       })
     }
   })
+  
+  if (results.length === 0 && query) {
+    results.push({
+      id: 'default-search',
+      type: 'default-search',
+      typeLabel: '搜索',
+      name: `在浏览器中搜索: ${query}`,
+      subtitle: '必应搜索',
+      searchTerm: query
+    })
+  }
   
   return results.slice(0, 8)
 })
@@ -290,7 +301,13 @@ const loadData = async () => {
 }
 
 const selectItem = async (item) => {
-  if (item.isSearch && item.search_url && item.searchTerm) {
+  searchQuery.value = ''
+  if (item.type === 'default-search' && item.searchTerm) {
+    const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(item.searchTerm)}`
+    window.electronAPI?.openExternal(searchUrl)
+    emit('close')
+    showModal.value = false
+  } else if (item.isSearch && item.search_url && item.searchTerm) {
     const searchUrl = item.search_url.replace('{query}', encodeURIComponent(item.searchTerm))
     window.electronAPI?.openExternal(searchUrl)
     emit('close')
@@ -330,7 +347,7 @@ const togglePassword = () => {
 
 const copyPassword = async () => {
   try {
-    await navigator.clipboard.writeText(decryptedPassword.value)
+    await navigator.clipboard.writeText(detailItem.value?.password || '')
     message.success('密码已复制')
   } catch (error) {
     message.error('复制失败')

@@ -77,6 +77,15 @@
             <n-icon><DocumentOutline /></n-icon>
             <span>文档列表</span>
             <n-text depth="3" style="font-size: 12px">{{ filteredDocs.length }} 个</n-text>
+            <n-button 
+              quaternary 
+              size="tiny" 
+              :type="showFavoritesOnly ? 'warning' : 'default'"
+              @click="showFavoritesOnly = !showFavoritesOnly"
+              style="margin-left: auto"
+            >
+              <template #icon><n-icon><Star /></n-icon></template>
+            </n-button>
           </div>
           <div class="section-content">
             <n-input
@@ -264,7 +273,7 @@
           <n-input v-model:value="folderForm.name" placeholder="输入文件夹名称" />
         </n-form-item>
         <n-form-item label="父文件夹" v-if="!editingFolder">
-          <n-tree-select
+          <n-select
             v-model:value="folderForm.parent_id"
             :options="folderTreeOptions"
             placeholder="选择父文件夹（可选）"
@@ -285,7 +294,7 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   NH2, NSpace, NButton, NIcon, NInput, NText, NEmpty, NModal, NForm, NFormItem,
-  NTreeSelect, NBadge, NSelect, useMessage, useDialog
+  NSelect, NBadge, useMessage, useDialog
 } from 'naive-ui'
 import {
   FolderOutline, DocumentOutline, SearchOutline, Star, StarOutline,
@@ -312,6 +321,7 @@ const flatFolders = ref([])
 const currentDoc = ref(null)
 const currentFolderId = ref(null)
 const searchQuery = ref('')
+const showFavoritesOnly = ref(false)
 const saving = ref(false)
 const showFolderModal = ref(false)
 const savingFolder = ref(false)
@@ -426,6 +436,10 @@ const folderTreeOptions = computed(() => [
 const filteredDocs = computed(() => {
   let result = documents.value
   
+  if (showFavoritesOnly.value) {
+    result = result.filter(d => d.is_favorite)
+  }
+  
   if (currentFolderId.value !== null) {
     const folderIds = getAllSubFolderIds(currentFolderId.value)
     folderIds.push(currentFolderId.value)
@@ -440,7 +454,12 @@ const filteredDocs = computed(() => {
     )
   }
   
-  return result.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+  return result.sort((a, b) => {
+    if (a.is_favorite !== b.is_favorite) {
+      return b.is_favorite - a.is_favorite
+    }
+    return new Date(b.updated_at) - new Date(a.updated_at)
+  })
 })
 
 const getAllSubFolderIds = (folderId) => {

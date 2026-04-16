@@ -26,12 +26,6 @@ const routes = [
     meta: { title: '代码片段' }
   },
   {
-    path: '/clipboard',
-    name: 'Clipboard',
-    component: () => import('../views/Clipboard.vue'),
-    meta: { title: '剪贴板历史' }
-  },
-  {
     path: '/documents',
     name: 'Documents',
     component: () => import('../views/Documents.vue'),

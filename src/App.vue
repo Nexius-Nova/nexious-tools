@@ -8,22 +8,33 @@
         <div class="app-container" :class="{ 'full-app': showFullApp }">
           <template v-if="showFullApp">
             <TitleBar />
-            <n-layout has-sider class="main-layout">
+            <div class="main-wrapper">
               <Sidebar :activeTab="currentTab" @changeTab="changeTab" />
-              <n-layout class="content-layout">
-                <n-layout-content class="content-area">
-                  <div class="content-header" v-if="showBackButton">
-                    <n-button text @click="backToQuickSearch" class="back-btn">
-                      <template #icon>
-                        <n-icon><ArrowBackOutline /></n-icon>
+              <main class="content-area">
+                <div class="content-header" v-if="showBackButton">
+                  <n-button text @click="backToQuickSearch" class="back-btn">
+                    <template #icon>
+                      <n-icon><ArrowBackOutline /></n-icon>
+                    </template>
+                    返回快速搜索窗
+                  </n-button>
+                </div>
+                <router-view v-slot="{ Component }">
+                  <transition name="page-fade" mode="out-in">
+                    <suspense>
+                      <template #default>
+                        <component :is="Component" />
                       </template>
-                      返回快速搜索窗
-                    </n-button>
-                  </div>
-                  <router-view />
-                </n-layout-content>
-              </n-layout>
-            </n-layout>
+                      <template #fallback>
+                        <div class="page-loading">
+                          <n-spin size="medium" />
+                        </div>
+                      </template>
+                    </suspense>
+                  </transition>
+                </router-view>
+              </main>
+            </div>
           </template>
 
           <template v-else>
@@ -149,6 +160,9 @@
                     <n-icon v-else-if="item.type === 'document'" size="20"
                       ><DocumentOutline
                     /></n-icon>
+                    <n-icon v-else-if="item.type === 'default-search'" size="20"
+                      ><SearchOutline
+                    /></n-icon>
                     <n-icon v-else size="20"><CodeSlashOutline /></n-icon>
                   </div>
                   <div class="result-info">
@@ -168,6 +182,48 @@
             @close="showQuickSearch = false"
             @select="handleQuickSelect"
           />
+
+          <n-modal v-model:show="showShortcutHelp" preset="card" title="快捷键帮助" style="width: 500px;">
+            <div class="shortcut-help-content">
+              <div class="shortcut-section">
+                <h4>全局快捷键</h4>
+                <div class="shortcut-item">
+                  <span class="shortcut-desc">显示/隐藏快速搜索窗口</span>
+                  <span class="shortcut-key">{{ globalShortcut }}</span>
+                </div>
+                <div class="shortcut-item">
+                  <span class="shortcut-desc">打开快捷键帮助</span>
+                  <span class="shortcut-key">?</span>
+                </div>
+              </div>
+              <div class="shortcut-section">
+                <h4>快速搜索窗口</h4>
+                <div class="shortcut-item">
+                  <span class="shortcut-desc">选择上一个结果</span>
+                  <span class="shortcut-key">↑</span>
+                </div>
+                <div class="shortcut-item">
+                  <span class="shortcut-desc">选择下一个结果</span>
+                  <span class="shortcut-key">↓</span>
+                </div>
+                <div class="shortcut-item">
+                  <span class="shortcut-desc">确认选择</span>
+                  <span class="shortcut-key">Enter</span>
+                </div>
+                <div class="shortcut-item">
+                  <span class="shortcut-desc">关闭搜索窗口</span>
+                  <span class="shortcut-key">Esc</span>
+                </div>
+              </div>
+              <div class="shortcut-section">
+                <h4>页面导航</h4>
+                <div class="shortcut-item">
+                  <span class="shortcut-desc">返回快速搜索窗口</span>
+                  <span class="shortcut-key">Esc</span>
+                </div>
+              </div>
+            </div>
+          </n-modal>
         </div>
       </n-dialog-provider>
     </n-message-provider>
@@ -186,8 +242,8 @@ import {
   NIcon,
   NTag,
   NAvatar,
-  NLayout,
-  NLayoutContent,
+  NSpin,
+  NModal,
   darkTheme
 } from "naive-ui";
 import {
@@ -221,6 +277,8 @@ const selectedResultIndex = ref(0);
 const loadingResults = ref(false);
 const quickLaunchRef = ref(null);
 const isInputFocused = ref(false);
+const showShortcutHelp = ref(false);
+const globalShortcut = ref("Ctrl+Shift+Space");
 
 const truncateUrl = (url, maxLength = 40) => {
   if (!url) return '';
@@ -339,6 +397,17 @@ const quickResults = computed(() => {
     }
   });
 
+  if (results.length === 0 && query) {
+    results.push({
+      id: 'default-search',
+      type: 'default-search',
+      typeLabel: '搜索',
+      name: `在浏览器中搜索: ${query}`,
+      subtitle: '必应搜索',
+      searchTerm: query
+    });
+  }
+
   return results.slice(0, 8);
 });
 
@@ -365,7 +434,11 @@ const updateWindowSize = () => {
 };
 
 const handleQuickResultSelect = (item) => {
-  if (item.isSearch && item.search_url && item.searchTerm) {
+  quickSearchQuery.value = '';
+  if (item.type === 'default-search' && item.searchTerm) {
+    const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(item.searchTerm)}`;
+    window.electronAPI?.openExternal(searchUrl);
+  } else if (item.isSearch && item.search_url && item.searchTerm) {
     const searchUrl = item.search_url.replace('{query}', encodeURIComponent(item.searchTerm));
     window.electronAPI?.openExternal(searchUrl);
   } else if (item.type === "website" && item.url) {
@@ -428,6 +501,9 @@ const backToQuickSearch = () => {
   showFullApp.value = false;
   showBackButton.value = false;
   router.push("/");
+  setTimeout(() => {
+    nextTick(updateWindowSize);
+  }, 100);
 };
 
 watch(quickSearchQuery, () => {
@@ -456,9 +532,12 @@ watch(showFullApp, (val) => {
     window.electronAPI?.expandWindow();
   } else {
     window.electronAPI?.shrinkWindow();
-    nextTick(() => {
-      quickSearchInput.value?.focus();
-    });
+    setTimeout(() => {
+      nextTick(() => {
+        quickSearchInput.value?.focus();
+        updateWindowSize();
+      });
+    }, 100);
   }
 });
 
@@ -500,6 +579,10 @@ const handleKeydown = (e) => {
     }
   }
   if (e.key === "Escape") {
+    if (showShortcutHelp.value) {
+      showShortcutHelp.value = false;
+      return;
+    }
     if (!showFullApp.value) {
       if (quickSearchQuery.value) {
         quickSearchQuery.value = "";
@@ -509,6 +592,10 @@ const handleKeydown = (e) => {
       }
     }
     showQuickSearch.value = false;
+  }
+  if (e.shiftKey && e.key === "?") {
+    e.preventDefault();
+    showShortcutHelp.value = true;
   }
 };
 
@@ -547,10 +634,6 @@ onMounted(() => {
       quickSearchInput.value?.select();
     });
   });
-  
-  if (window.electronAPI?.startClipboardWatcher) {
-    window.electronAPI.startClipboardWatcher()
-  }
 });
 
 onUnmounted(() => {
@@ -570,23 +653,18 @@ onUnmounted(() => {
   background-color: var(--bg-color);
 }
 
-.main-layout {
+.main-wrapper {
+  display: flex;
   flex: 1;
-  min-height: 0;
-  height: 100%;
-}
-
-.content-layout {
-  flex: 1;
-  background-color: var(--bg-color);
-  min-height: 0;
+  overflow: hidden;
 }
 
 .content-area {
+  flex: 1;
   padding: 24px;
-  height: 100%;
   overflow-y: auto;
   background-color: var(--bg-color);
+  height: calc(100vh - var(--title-bar-height));
 }
 
 .content-header {
@@ -842,5 +920,48 @@ onUnmounted(() => {
   .result-tag {
     display: none;
   }
+}
+
+.shortcut-help-content {
+  padding: 8px 0;
+}
+
+.shortcut-section {
+  margin-bottom: 20px;
+}
+
+.shortcut-section:last-child {
+  margin-bottom: 0;
+}
+
+.shortcut-section h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-color-2);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.shortcut-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.shortcut-desc {
+  font-size: 14px;
+  color: var(--text-color-1);
+}
+
+.shortcut-key {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 12px;
+  padding: 4px 10px;
+  background: var(--hover-color);
+  border-radius: 6px;
+  color: var(--text-color-2);
+  border: 1px solid var(--border-color);
 }
 </style>
