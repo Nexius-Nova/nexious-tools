@@ -17,6 +17,18 @@
           style="width: 110px"
           :options="codeThemeOptions"
         />
+        <n-button @click="triggerFileUpload" :loading="uploading">
+          <template #icon><n-icon><CloudUploadOutline /></n-icon></template>
+          导入MD文件
+        </n-button>
+        <input
+          ref="fileInputRef"
+          type="file"
+          accept=".md,.markdown"
+          multiple
+          style="display: none"
+          @change="handleFileUpload"
+        />
         <n-button @click="openFolderModal(currentFolderId)">
           <template #icon><n-icon><FolderOutline /></n-icon></template>
           新建文件夹
@@ -205,6 +217,9 @@
                 class="title-input"
               />
               <n-space :size="8">
+                <n-button quaternary circle :type="showCatalog ? 'primary' : 'default'" @click="showCatalog = !showCatalog">
+                  <template #icon><n-icon size="18"><ListOutline /></n-icon></template>
+                </n-button>
                 <n-button @click="formatDocument" :loading="formattingDoc" type="info">
                   <template #icon><n-icon><SparklesOutline /></n-icon></template>
                   AI整理
@@ -238,19 +253,46 @@
               </div>
             </div>
           </div>
-          <div class="editor-wrapper">
-            <MdEditor
-              v-model="currentDoc.content"
-              :theme="editorTheme"
-              :previewTheme="previewTheme"
-              :codeTheme="codeTheme"
-              :toolbars="editorToolbars"
-              :previewOnly="false"
-              class="md-editor"
-              @onChange="onContentChange"
-              @onUploadImg="handleUploadImg"
-              @onPaste="handlePaste"
+          <div class="editor-body">
+            <CatalogSidebar
+              :content="currentDoc.content"
+              :scroll-container="editPreviewScrollEl"
+              :editor-id="editPreviewId"
+              :heading-id-generator="mdHeadingId"
+              v-show="showCatalog"
             />
+            <div class="editor-main">
+              <div class="editor-pane">
+                <div class="pane-header">
+                  <span>编辑</span>
+                  <span class="word-count">{{ currentDoc.content?.length || 0 }} 字</span>
+                </div>
+                <div class="pane-content">
+                  <textarea
+                    v-model="currentDoc.content"
+                    class="editor-textarea"
+                    placeholder="开始编写文档..."
+                    @input="onContentChange"
+                  ></textarea>
+                </div>
+              </div>
+              <div class="preview-pane">
+                <div class="pane-header">
+                  <span>预览</span>
+                </div>
+                <div class="pane-content preview-scroll" ref="editPreviewScrollEl">
+                  <MdPreview
+                    :id="editPreviewId"
+                    :modelValue="currentDoc.content"
+                    :theme="editorTheme"
+                    :previewTheme="previewTheme"
+                    :codeTheme="codeTheme"
+                    :mdHeadingId="mdHeadingId"
+                    class="md-preview"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </template>
       </div>
@@ -301,7 +343,7 @@ import {
   CreateOutline, TrashOutline, LinkOutline, ChevronDownOutline,
   SaveOutline, TextOutline, AddOutline, TimeOutline, AddCircleOutline,
   ColorPaletteOutline, CodeSlashOutline, ListOutline, SparklesOutline, CloudDownloadOutline,
-  ArrowUpOutline
+  ArrowUpOutline, CloudUploadOutline
 } from '@vicons/ionicons5'
 import { MdEditor, MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
@@ -323,6 +365,8 @@ const currentFolderId = ref(null)
 const searchQuery = ref('')
 const showFavoritesOnly = ref(false)
 const saving = ref(false)
+const uploading = ref(false)
+const fileInputRef = ref(null)
 const showFolderModal = ref(false)
 const savingFolder = ref(false)
 const editingFolder = ref(null)
@@ -339,9 +383,11 @@ const previewTheme = ref(localStorage.getItem('md-preview-theme') || 'github')
 const codeTheme = ref(localStorage.getItem('md-code-theme') || 'github')
 const showCatalog = ref(true)
 const previewId = 'doc-preview'
+const editPreviewId = 'doc-edit-preview'
 const formattingDoc = ref(false)
 const importingUrl = ref(false)
 const previewScrollEl = ref(null)
+const editPreviewScrollEl = ref(null)
 const editorRef = ref(null)
 
 const mdHeadingId = ({ text, level, index }) => {
@@ -596,6 +642,80 @@ const createNewDoc = () => {
     is_favorite: 0
   }
   originalDoc.value = null
+}
+
+const triggerFileUpload = () => {
+  fileInputRef.value?.click()
+}
+
+const handleFileUpload = async (e) => {
+  const files = e.target.files
+  if (!files || files.length === 0) return
+
+  uploading.value = true
+  let successCount = 0
+  let failCount = 0
+
+  for (const file of files) {
+    if (!file.name.match(/\.(md|markdown)$/i)) {
+      message.warning(`${file.name} 不是 Markdown 文件`)
+      failCount++
+      continue
+    }
+
+    try {
+      const content = await readFileContent(file)
+      const title = extractTitle(content) || file.name.replace(/\.(md|markdown)$/i, '')
+      const wordCount = content.replace(/\s/g, '').length
+
+      const docData = {
+        title,
+        content,
+        content_type: 'markdown',
+        folder_id: currentFolderId.value,
+        source_url: '',
+        is_favorite: 0,
+        word_count: wordCount
+      }
+
+      await documentApi.create(docData)
+      successCount++
+    } catch (error) {
+      console.error(`导入 ${file.name} 失败:`, error)
+      failCount++
+    }
+  }
+
+  uploading.value = false
+  e.target.value = ''
+
+  if (successCount > 0) {
+    message.success(`成功导入 ${successCount} 个文档`)
+    loadDocuments()
+  }
+  if (failCount > 0) {
+    message.warning(`${failCount} 个文件导入失败`)
+  }
+}
+
+const readFileContent = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => resolve(e.target.result)
+    reader.onerror = (e) => reject(e)
+    reader.readAsText(file, 'UTF-8')
+  })
+}
+
+const extractTitle = (content) => {
+  const lines = content.split('\n')
+  for (const line of lines) {
+    const match = line.match(/^#\s+(.+)$/)
+    if (match) {
+      return match[1].trim()
+    }
+  }
+  return null
 }
 
 const enterEditMode = () => {
@@ -1415,6 +1535,75 @@ onMounted(() => {
 .editor-wrapper {
   flex: 1;
   overflow: hidden;
+}
+
+.editor-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.editor-main {
+  flex: 1;
+  display: flex;
+  gap: 1px;
+  background: var(--border-color);
+  overflow: hidden;
+}
+
+.editor-pane,
+.preview-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--card-bg);
+  overflow: hidden;
+}
+
+.pane-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--bg-color);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-color-3);
+}
+
+.word-count {
+  font-weight: 400;
+  color: var(--text-color-4);
+}
+
+.pane-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.preview-scroll {
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.editor-textarea {
+  width: 100%;
+  height: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 16px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  background: var(--card-bg);
+  color: var(--text-color);
+  tab-size: 2;
+}
+
+.editor-textarea::placeholder {
+  color: var(--text-color-4);
 }
 
 .md-editor {
