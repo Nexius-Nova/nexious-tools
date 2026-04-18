@@ -24,10 +24,11 @@
           />
         </div>
 
-        <div class="command-list" v-if="filteredResults.length > 0">
+        <div class="command-list" v-if="filteredResults.length > 0" ref="commandListRef">
           <div 
             v-for="(item, index) in filteredResults" 
             :key="item.type + '-' + item.id"
+            :ref="el => itemRefs[index] = el"
             :class="['command-item', { selected: index === selectedIndex }]"
             @click="selectItem(item)"
             @mouseenter="selectedIndex = index"
@@ -129,7 +130,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { NModal, NIcon, NTag, NDescriptions, NDescriptionsItem, NText, NButton, NSpace, NCode, NAvatar, useMessage } from 'naive-ui'
 import { SearchOutline, KeyOutline, CodeSlashOutline, DocumentOutline } from '@vicons/ionicons5'
@@ -147,6 +148,8 @@ const searchQuery = ref('')
 const searchInput = ref(null)
 const selectedIndex = ref(0)
 const loading = ref(false)
+const itemRefs = ref([])
+const commandListRef = ref(null)
 
 const showDetail = ref(false)
 const detailItem = ref(null)
@@ -216,7 +219,11 @@ const filteredResults = computed(() => {
   
   websites.value.forEach(w => {
     if (w.type === 'bookmark') {
-      if (w.name?.toLowerCase().includes(searchPrefix) || w.url?.toLowerCase().includes(searchPrefix)) {
+      if (
+        w.name?.toLowerCase().includes(searchPrefix) || 
+        w.alias?.toLowerCase().includes(searchPrefix)
+
+      ) {
         results.push({
           ...w,
           type: 'bookmark',
@@ -225,7 +232,10 @@ const filteredResults = computed(() => {
           subtitle: truncateUrl(w.url)
         })
       }
-    } else if (w.name?.toLowerCase().includes(searchPrefix) || w.alias?.toLowerCase().includes(searchPrefix)) {
+    } else if (
+      w.name?.toLowerCase().includes(searchPrefix) || 
+      w.alias?.toLowerCase().includes(searchPrefix) 
+    ) {
       results.push({
         ...w,
         type: w.type === 'app' ? 'app' : 'website',
@@ -238,7 +248,11 @@ const filteredResults = computed(() => {
   
   passwords.value.forEach(p => {
     const name = p.title || p.website_name || p.username
-    if (name?.toLowerCase().includes(searchPrefix) || p.username?.toLowerCase().includes(searchPrefix)) {
+    if (
+      name?.toLowerCase().includes(searchPrefix) || 
+      p.username?.toLowerCase().includes(searchPrefix) ||
+      p.website_url?.toLowerCase().includes(searchPrefix)
+    ) {
       results.push({
         ...p,
         type: 'password',
@@ -250,7 +264,10 @@ const filteredResults = computed(() => {
   })
   
   snippets.value.forEach(s => {
-    if (s.title?.toLowerCase().includes(searchPrefix) || s.language?.toLowerCase().includes(searchPrefix)) {
+    const tagsStr = s.tags?.join(' ').toLowerCase() || ''
+    if (
+      s.title?.toLowerCase().includes(searchPrefix)
+    ) {
       results.push({
         ...s,
         type: 'snippet',
@@ -262,7 +279,9 @@ const filteredResults = computed(() => {
   })
   
   documents.value.forEach(d => {
-    if (d.title?.toLowerCase().includes(searchPrefix)) {
+    if (
+      d.title?.toLowerCase().includes(searchPrefix)
+    ) {
       results.push({
         ...d,
         type: 'document',
@@ -376,6 +395,20 @@ const copyPassword = async () => {
 
 watch(searchQuery, () => {
   selectedIndex.value = 0
+  itemRefs.value = []
+})
+
+const scrollToSelected = () => {
+  nextTick(() => {
+    const selectedItem = itemRefs.value[selectedIndex.value]
+    if (selectedItem && commandListRef.value) {
+      selectedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  })
+}
+
+watch(selectedIndex, () => {
+  scrollToSelected()
 })
 
 watch(showModal, (newVal) => {

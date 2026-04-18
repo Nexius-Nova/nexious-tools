@@ -356,7 +356,8 @@ const quickResults = computed(() => {
     const searchPrefix = spaceIndex > 0 ? query.substring(0, spaceIndex).toLowerCase() : query
     if (
       name?.toLowerCase().includes(searchPrefix) ||
-      p.username?.toLowerCase().includes(searchPrefix)
+      p.username?.toLowerCase().includes(searchPrefix) ||
+      p.website_url?.toLowerCase().includes(searchPrefix)
     ) {
       results.push({
         ...p,
@@ -370,9 +371,9 @@ const quickResults = computed(() => {
 
   snippets.value.forEach((s) => {
     const searchPrefix = spaceIndex > 0 ? query.substring(0, spaceIndex).toLowerCase() : query
+    const tagsStr = s.tags?.join(' ').toLowerCase() || ''
     if (
-      s.title?.toLowerCase().includes(searchPrefix) ||
-      s.language?.toLowerCase().includes(searchPrefix)
+      s.title?.toLowerCase().includes(searchPrefix)
     ) {
       results.push({
         ...s,
@@ -386,7 +387,9 @@ const quickResults = computed(() => {
 
   documents.value.forEach((d) => {
     const searchPrefix = spaceIndex > 0 ? query.substring(0, spaceIndex).toLowerCase() : query
-    if (d.title?.toLowerCase().includes(searchPrefix)) {
+    if (
+      d.title?.toLowerCase().includes(searchPrefix)
+    ) {
       results.push({
         ...d,
         type: "document",

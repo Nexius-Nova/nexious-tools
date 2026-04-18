@@ -62,27 +62,29 @@
       <n-tab-pane name="bookmark" tab="网页收藏" />
     </n-tabs>
 
+    <!-- <div class="list-info" v-if="!loading && filteredItems.length > 0">
+      <n-text depth="3" style="font-size: 12px">
+        共 {{ filteredItems.length }} 条数据{{ filteredItems.length > pageSize ? `，当前显示前 ${pageSize} 条` : '' }}
+      </n-text>
+    </div> -->
+
     <SkeletonLoader v-if="loading" type="card" :count="6" />
 
-    <n-grid
-      v-else-if="viewMode === 'card'"
-      :cols="responsiveCols"
-      :x-gap="16"
-      :y-gap="16"
-      responsive="screen"
-    >
-      <n-grid-item 
-        v-for="(item, index) in filteredItems" 
-        :key="item.id"
-        draggable="true"
-        @dragstart="handleDragStart($event, index)"
-        @dragover.prevent="handleDragOver($event, index)"
-        @dragleave="handleDragLeave"
-        @drop.prevent="handleDrop($event, index)"
-        @dragend="handleDragEnd"
-        :class="{ 'dragging': dragIndex === index, 'drag-over': dragOverIndex === index }"
-      >
-        <n-card hoverable class="website-card">
+    <div v-else-if="viewMode === 'card'" class="card-scroll-container" ref="cardContainerRef" @scroll="handleScroll">
+      <div class="card-grid-container">
+        <div
+          v-for="(item, index) in displayedItems"
+          :key="item.id"
+          class="card-grid-item"
+          draggable="true"
+          @dragstart="handleDragStart($event, index)"
+          @dragover.prevent="handleDragOver($event, index)"
+          @dragleave="handleDragLeave"
+          @drop.prevent="handleDrop($event, index)"
+          @dragend="handleDragEnd"
+          :class="{ 'dragging': dragIndex === index, 'drag-over': dragOverIndex === index }"
+        >
+          <n-card hoverable class="website-card">
           <template #header>
             <n-space align="center">
               <div class="card-icon-wrapper">
@@ -203,15 +205,25 @@
             </n-space>
           </template>
         </n-card>
-      </n-grid-item>
-    </n-grid>
+        </div>
+      </div>
+      
+      <!-- <div v-if="loadingMore" class="loading-indicator">
+        <n-spin size="small" />
+        <n-text depth="3" style="margin-left: 8px; font-size: 12px">加载中...</n-text>
+      </div>
+      <div v-else-if="displayedItems.length >= filteredItems.length && filteredItems.length > 0" class="loading-indicator">
+        <n-text depth="3" style="font-size: 12px">已加载全部 {{ filteredItems.length }} 条数据</n-text>
+      </div> -->
+    </div>
 
     <n-data-table
       v-else
       :columns="columns"
-      :data="filteredItems"
-      :pagination="false"
+      :data="displayedItems"
+      :pagination="tablePagination"
       :row-key="(row) => row.id"
+      :max-height="600"
     />
 
     <n-empty
@@ -497,7 +509,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, h } from "vue";
+import { ref, computed, onMounted, onUnmounted, h, watch } from "vue";
 import {
   NButton,
   NSpace,
@@ -519,6 +531,7 @@ import {
   NCheckbox,
   NCheckboxGroup,
   NScrollbar,
+  NSpin,
   NInput as NInputComponent,
   NDivider,
   useMessage,
@@ -573,6 +586,41 @@ const selectedBookmarks = ref([]);
 const bookmarkSearchQuery = ref("");
 const dragIndex = ref(-1);
 const dragOverIndex = ref(-1);
+const pageSize = ref(50);
+const loadingMore = ref(false);
+const cardContainerRef = ref(null);
+
+const tablePagination = computed(() => ({
+  pageSize: 20,
+  showSizePicker: true,
+  pageSizes: [20, 50, 100],
+  showQuickJumper: true
+}));
+
+const displayedItems = computed(() => {
+  return filteredItems.value.slice(0, pageSize.value);
+});
+
+const loadMore = () => {
+  if (loadingMore.value || displayedItems.value.length >= filteredItems.value.length) return;
+  loadingMore.value = true;
+  setTimeout(() => {
+    pageSize.value += 30;
+    loadingMore.value = false;
+  }, 150);
+};
+
+const handleScroll = (e) => {
+  const container = e.target;
+  const scrollBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+  if (scrollBottom < 200) {
+    loadMore();
+  }
+};
+
+watch([activeTab, searchQuery], () => {
+  pageSize.value = 50;
+});
 
 const filteredScannedApps = computed(() => {
   if (!appSearchQuery.value) return scannedApps.value;
@@ -897,31 +945,31 @@ const columns = [
       return row.search_url || "-";
     }
   },
-  {
-    title: "图标URL",
-    key: "favicon_edit",
-    width: 150,
-    ellipsis: { tooltip: true },
-    render(row) {
-      if (editingRowKey.value === row.id) {
-        return h(NInputComponent, {
-          value: editingData.value.favicon,
-          onUpdateValue: (v) => {
-            editingData.value.favicon = v;
-          },
-          size: "small",
-          placeholder: "图标URL"
-        });
-      }
-      return h(
-        NText,
-        { depth: 3, style: "font-size: 12px;" },
-        {
-          default: () => (row.favicon ? "已设置" : "-")
-        }
-      );
-    }
-  },
+  // {
+  //   title: "图标URL",
+  //   key: "favicon_edit",
+  //   width: 150,
+  //   ellipsis: { tooltip: true },
+  //   render(row) {
+  //     if (editingRowKey.value === row.id) {
+  //       return h(NInputComponent, {
+  //         value: editingData.value.favicon,
+  //         onUpdateValue: (v) => {
+  //           editingData.value.favicon = v;
+  //         },
+  //         size: "small",
+  //         placeholder: "图标URL"
+  //       });
+  //     }
+  //     return h(
+  //       NText,
+  //       { depth: 3, style: "font-size: 12px;" },
+  //       {
+  //         default: () => (row.favicon ? "已设置" : "-")
+  //       }
+  //     );
+  //   }
+  // },
   {
     title: "操作",
     key: "actions",
@@ -1354,19 +1402,84 @@ onMounted(() => {
   height: 100%;
 }
 
+.list-info {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: var(--card-bg, #f5f5f5);
+  border-radius: 8px;
+}
+
+.card-scroll-container {
+  max-height: calc(100vh - 300px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.card-scroll-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.card-scroll-container::-webkit-scrollbar-thumb {
+  background: var(--border-color, #ddd);
+  border-radius: 3px;
+}
+
+.card-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary, #999);
+}
+
+.load-more-container {
+  display: flex;
+  justify-content: center;
+  padding: 20px 0;
+  border-top: 1px solid var(--border-color, #eee);
+  margin-top: 16px;
+}
+
+.loading-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 16px 0;
+  margin-top: 8px;
+}
+
+.card-grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.card-grid-item {
+  display: flex;
+}
+
+.website-card {
+  width: 100%;
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.website-card :deep(.n-card__content) {
+  flex: 1;
+  padding: 12px 16px;
+}
+
+.website-card :deep(.n-card-header) {
+  padding: 12px 16px;
+}
+
+.website-card :deep(.n-card__footer) {
+  padding: 8px 16px;
+}
+
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-}
-
-.website-card {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  max-width: 350px;
-  transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .dragging .website-card {
@@ -1377,10 +1490,6 @@ onMounted(() => {
 .drag-over .website-card {
   border: 2px dashed var(--primary-color, #667eea);
   transform: scale(1.02);
-}
-
-.website-card :deep(.n-card__content) {
-  flex: 1;
 }
 
 .card-description {
@@ -1490,7 +1599,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0;
-  max-height: calc(90vh - 180px);
+  max-height: calc(90vh - 200px);
   overflow: hidden;
 }
 
@@ -1718,10 +1827,6 @@ onMounted(() => {
 }
 
 @media (max-width: 900px) {
-  .website-manager .n-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-
   .app-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1738,16 +1843,12 @@ onMounted(() => {
     align-items: flex-start;
   }
 
-  .website-manager .n-grid {
-    grid-template-columns: 1fr !important;
-  }
-
   .app-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 
   .website-card {
-    padding: 12px;
+    height: 160px;
   }
 
   .card-icon-wrapper {
