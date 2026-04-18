@@ -7,11 +7,24 @@
   >
     <n-form ref="formRef" :model="form" label-placement="left" label-width="80">
       <n-form-item label="类型" path="type">
-        <n-radio-group v-model:value="form.type">
-          <n-radio-button value="website">网站链接</n-radio-button>
-          <n-radio-button value="bookmark">网页收藏</n-radio-button>
-          <n-radio-button value="app">桌面应用</n-radio-button>
-        </n-radio-group>
+        <n-space vertical style="width: 100%">
+          <n-radio-group v-model:value="form.type">
+            <n-radio-button value="website">网站链接</n-radio-button>
+            <n-radio-button value="bookmark">网页收藏</n-radio-button>
+            <n-radio-button value="app">桌面应用</n-radio-button>
+          </n-radio-group>
+          <n-text depth="3" style="font-size: 12px; margin-top: 4px">
+            <template v-if="form.type === 'website'">
+              网站链接：支持快速搜索功能，输入别名+关键词可直接跳转搜索结果页
+            </template>
+            <template v-else-if="form.type === 'bookmark'">
+              网页收藏：保存常用网页链接，方便快速访问和管理
+            </template>
+            <template v-else-if="form.type === 'app'">
+              桌面应用：添加本地应用程序，支持一键启动桌面软件
+            </template>
+          </n-text>
+        </n-space>
       </n-form-item>
 
       <n-form-item v-if="form.type === 'website' || form.type === 'bookmark'" label="URL" path="url" :rule="urlRule">
@@ -129,18 +142,26 @@
         </n-space>
       </n-form-item>
 
-      <n-form-item v-if="form.type === 'website'" label="描述" path="description">
-        <n-input-group>
-          <n-input 
-            v-model:value="form.description" 
-            type="textarea"
-            placeholder="描述信息"
-            :autosize="{ minRows: 3, maxRows: 5 }"
-          />
-          <n-button @click="generateDescription" :loading="generating">
-            AI生成
-          </n-button>
-        </n-input-group>
+      <n-form-item label="描述" path="description">
+        <n-space vertical style="width: 100%">
+          <n-input-group>
+            <n-input 
+              v-model:value="form.description" 
+              type="textarea"
+              placeholder="描述信息"
+              :autosize="{ minRows: 3, maxRows: 5 }"
+            />
+            <n-button v-if="form.type === 'website'" @click="generateDescription" :loading="generating">
+              AI生成
+            </n-button>
+          </n-input-group>
+          <n-text depth="3" style="font-size: 12px" v-if="form.type === 'bookmark'">
+            添加描述方便日后查找和管理
+          </n-text>
+          <n-text depth="3" style="font-size: 12px" v-else-if="form.type === 'app'">
+            添加应用描述，如用途、快捷方式等
+          </n-text>
+        </n-space>
       </n-form-item>
     </n-form>
 

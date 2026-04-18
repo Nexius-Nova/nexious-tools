@@ -67,6 +67,12 @@
               {{ truncateUrl(item.website_url) }}
             </n-a>
           </div>
+          <div class="info-row notes-row" v-if="item.notes">
+            <!-- <span class="label">备注</span> -->
+            <n-ellipsis class="notes-text" :line-clamp="2" :tooltip="{ width: 300 }">
+              {{ item.notes }}
+            </n-ellipsis>
+          </div>
         </div>
         
         <div class="card-actions">
@@ -133,6 +139,7 @@ import {
   NText,
   NModal,
   NEmpty,
+  NEllipsis,
   useMessage,
   useDialog
 } from 'naive-ui'
@@ -300,9 +307,12 @@ onMounted(async () => {
 .password-card {
   background: var(--card-bg);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 16px;
   transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  height: 250px;
 }
 
 .password-card:hover {
@@ -314,6 +324,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   margin-bottom: 12px;
+  flex-shrink: 0;
 }
 
 .card-icon {
@@ -357,9 +368,12 @@ onMounted(async () => {
 }
 
 .card-body {
-  padding: 8px 0;
   border-top: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
 }
 
 .info-row {
@@ -394,5 +408,27 @@ onMounted(async () => {
   justify-content: flex-end;
   gap: 8px;
   padding-top: 12px;
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+.notes-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.notes-row .label {
+  margin-bottom: 2px;
+}
+
+.notes-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: 100%;
+  word-break: break-all;
+  max-height: 36px;
+  overflow: hidden;
 }
 </style>

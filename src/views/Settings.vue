@@ -40,7 +40,7 @@
         <n-space vertical>
           <n-form :model="settings" label-placement="left" label-width="100">
             <n-form-item label="颜色主题">
-              <n-space>
+              <div class="theme-grid">
                 <div
                   v-for="theme in themeOptions"
                   :key="theme.value"
@@ -48,18 +48,20 @@
                     'theme-item',
                     { active: currentTheme === theme.value }
                   ]"
-                  :style="{ backgroundColor: theme.color }"
                   @click="setTheme(theme.value)"
                 >
-                  <n-icon
-                    v-if="currentTheme === theme.value"
-                    color="#fff"
-                    size="16"
-                  >
-                    <CheckmarkOutline />
-                  </n-icon>
+                  <div class="theme-color" :style="{ backgroundColor: theme.color }">
+                    <n-icon
+                      v-if="currentTheme === theme.value"
+                      color="#fff"
+                      size="16"
+                    >
+                      <CheckmarkOutline />
+                    </n-icon>
+                  </div>
+                  <span class="theme-label">{{ theme.label }}</span>
                 </div>
-              </n-space>
+              </div>
             </n-form-item>
             <n-text depth="3" style="font-size: 12px">
               选择您喜欢的颜色主题，深色主题可保护眼睛
@@ -606,11 +608,18 @@ const modelColumns = [
 
 const themeOptions = [
   { label: "默认蓝", value: "default", color: "#0d74ea" },
+  { label: "天空蓝", value: "blue", color: "#1890ff" },
+  { label: "极客蓝", value: "geekblue", color: "#2f54eb" },
   { label: "优雅紫", value: "purple", color: "#722ed1" },
-  { label: "清新绿", value: "green", color: "#52c41a" },
-  { label: "活力橙", value: "orange", color: "#fa8c16" },
-  { label: "青色", value: "cyan", color: "#13c2c2" },
+  { label: "洋红", value: "magenta", color: "#eb2f96" },
   { label: "粉红", value: "pink", color: "#eb2f96" },
+  { label: "清新绿", value: "green", color: "#52c41a" },
+  { label: "青柠", value: "lime", color: "#a0d911" },
+  { label: "青色", value: "cyan", color: "#13c2c2" },
+  { label: "活力橙", value: "orange", color: "#fa8c16" },
+  { label: "金色", value: "gold", color: "#faad14" },
+  { label: "火山红", value: "volcano", color: "#fa541c" },
+  { label: "红色", value: "red", color: "#f5222d" },
   { label: "深色", value: "dark", color: "#141414" }
 ];
 
@@ -1073,26 +1082,66 @@ onMounted(() => {
   max-width: 800px;
 }
 
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 12px;
+}
+
 .theme-item {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  cursor: pointer;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  transition:
-    transform 0.2s,
-    box-shadow 0.2s;
-  border: 2px solid transparent;
+  gap: 6px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.2s;
 }
 
 .theme-item:hover {
-  transform: scale(1.1);
+  background: var(--hover-bg, rgba(0, 0, 0, 0.04));
 }
 
 .theme-item.active {
+  background: var(--active-bg, rgba(0, 0, 0, 0.08));
+}
+
+.theme-color {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+  border: 2px solid transparent;
+}
+
+.theme-item:hover .theme-color {
+  transform: scale(1.1);
+}
+
+.theme-item.active .theme-color {
   border-color: var(--text-primary);
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+}
+
+.theme-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .theme-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .theme-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 </style>

@@ -8,6 +8,13 @@ const themeColors = {
   orange: { primary: '#fa8c16', hover: '#d46b08' },
   cyan: { primary: '#13c2c2', hover: '#08979c' },
   pink: { primary: '#eb2f96', hover: '#c41d7f' },
+  red: { primary: '#f5222d', hover: '#cf1322' },
+  gold: { primary: '#faad14', hover: '#d48806' },
+  lime: { primary: '#a0d911', hover: '#7cb305' },
+  blue: { primary: '#1890ff', hover: '#096dd9' },
+  geekblue: { primary: '#2f54eb', hover: '#1d39c4' },
+  magenta: { primary: '#eb2f96', hover: '#c41d7f' },
+  volcano: { primary: '#fa541c', hover: '#d4380d' },
   dark: { primary: '#177ddc', hover: '#3c9ae8' }
 }
 
