@@ -110,12 +110,6 @@
               /></n-icon>
             </n-button>
           </n-dropdown>
-          <n-button @click="showParamsModal = true">
-            <template #icon>
-              <n-icon><SettingsOutline /></n-icon>
-            </template>
-            参数
-          </n-button>
           <n-button @click="showReferenceModal = true">
             <template #icon>
               <n-icon><LinkOutline /></n-icon>
@@ -637,60 +631,6 @@
       </n-modal>
 
       <n-modal
-        v-model:show="showParamsModal"
-        preset="card"
-        title="模型参数设置"
-        style="width: 500px"
-      >
-        <div class="params-modal-content">
-          <n-form :model="modelParams" label-placement="left" label-width="120px">
-            <n-form-item label="Temperature">
-              <n-slider
-                v-model:value="modelParams.temperature"
-                :min="0"
-                :max="2"
-                :step="0.1"
-                :tooltip="true"
-                style="flex: 1"
-              />
-              <n-input-number
-                v-model:value="modelParams.temperature"
-                :min="0"
-                :max="2"
-                :step="0.1"
-                size="small"
-                style="width: 80px; margin-left: 12px"
-              />
-            </n-form-item>
-            <n-form-item label="Max Tokens">
-              <n-slider
-                v-model:value="modelParams.max_tokens"
-                :min="256"
-                :max="8192"
-                :step="256"
-                :tooltip="true"
-                style="flex: 1"
-              />
-              <n-input-number
-                v-model:value="modelParams.max_tokens"
-                :min="256"
-                :max="8192"
-                :step="256"
-                size="small"
-                style="width: 100px; margin-left: 12px"
-              />
-            </n-form-item>
-          </n-form>
-          <div class="params-tips">
-            <n-text depth="3" style="font-size: 12px">
-              Temperature 控制回复的随机性，值越低越确定，值越高越随机。<br/>
-              Max Tokens 控制回复的最大长度。
-            </n-text>
-          </div>
-        </div>
-      </n-modal>
-
-      <n-modal
         v-model:show="showTemplateModal"
         preset="card"
         title="提示词模板管理"
@@ -862,12 +802,7 @@ const addingData = ref(false);
 
 const templates = ref([]);
 const currentTemplate = ref(null);
-const showParamsModal = ref(false);
 const showTemplateModal = ref(false);
-const modelParams = ref({
-  temperature: 0.7,
-  max_tokens: 4096
-});
 const newTemplate = ref({
   name: "",
   category: "general",
@@ -1351,9 +1286,7 @@ const sendMessage = async () => {
           })),
           stream: true,
           systemPrompt: systemPrompt || undefined,
-          continueFrom: continueFrom,
-          temperature: modelParams.value.temperature,
-          max_tokens: modelParams.value.max_tokens
+          continueFrom: continueFrom
         }),
         signal: abortController.value.signal
       });
@@ -2231,17 +2164,6 @@ onMounted(() => {
   margin-top: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--border-color);
-}
-
-.params-modal-content {
-  padding: 8px 0;
-}
-
-.params-tips {
-  margin-top: 16px;
-  padding: 12px;
-  background: var(--bg-color);
-  border-radius: 8px;
 }
 
 .template-modal-content {

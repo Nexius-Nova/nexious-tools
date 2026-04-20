@@ -685,7 +685,8 @@ const filterWithAI = async () => {
     message.success(`AI筛选完成，保留 ${scannedApps.value.length} 个应用`);
   } catch (error) {
     console.error("AI筛选失败:", error);
-    message.error("AI筛选失败，请检查API配置");
+    const errorMsg = error.response?.data?.error || error.message || "AI筛选失败，请检查API配置";
+    message.error(errorMsg);
   } finally {
     filtering.value = false;
   }
@@ -761,7 +762,8 @@ const saveEdit = async (row) => {
     editingData.value = {};
   } catch (error) {
     console.error("保存失败:", error);
-    message.error("保存失败，请重试");
+    const errorMsg = error.response?.data?.error || error.message || "保存失败，请重试";
+    message.error(errorMsg);
   }
 };
 
@@ -1072,7 +1074,8 @@ const loadItems = async () => {
     await reloadWebsites();
   } catch (error) {
     console.error("加载数据失败:", error);
-    message.error("加载数据失败");
+    const errorMsg = error.response?.data?.error || error.message || "加载数据失败";
+    message.error(errorMsg);
   }
 };
 
@@ -1109,7 +1112,8 @@ const handleSave = async (data) => {
     await loadItems();
   } catch (error) {
     console.error("保存失败:", error);
-    message.error("保存失败，请重试");
+    const errorMsg = error.response?.data?.error || error.message || "保存失败，请重试";
+    message.error(errorMsg);
   }
 };
 
@@ -1127,7 +1131,8 @@ const deleteItem = (item) => {
         message.success("删除成功");
       } catch (error) {
         console.error("删除失败:", error);
-        message.error("删除失败，请重试");
+        const errorMsg = error.response?.data?.error || error.message || "删除失败，请重试";
+        message.error(errorMsg);
       }
     }
   });
@@ -1166,7 +1171,8 @@ const scanApps = async () => {
     }
   } catch (error) {
     console.error("扫描应用失败:", error);
-    message.error("扫描应用失败");
+    const errorMsg = error.response?.data?.error || error.message || "扫描应用失败";
+    message.error(errorMsg);
   } finally {
     scanning.value = false;
   }
@@ -1218,6 +1224,7 @@ const getIconGradient = (name) => {
 const importSelectedApps = async () => {
   importing.value = true;
   let imported = 0;
+  let failedApps = [];
   try {
     for (const key of selectedApps.value) {
       const app = scannedApps.value.find((a) => (a.path || a.name) === key);
@@ -1235,14 +1242,22 @@ const importSelectedApps = async () => {
           imported++;
         } catch (e) {
           console.error("导入应用失败:", e);
+          const errorMsg = e.response?.data?.error || e.message || "导入失败";
+          failedApps.push(`${app.name}: ${errorMsg}`);
         }
       }
     }
     showPreviewModal.value = false;
-    message.success(`成功导入 ${imported} 个应用`);
+    if (imported > 0) {
+      message.success(`成功导入 ${imported} 个应用`);
+    }
+    if (failedApps.length > 0) {
+      message.warning(`部分应用导入失败: ${failedApps.slice(0, 3).join(', ')}${failedApps.length > 3 ? '...' : ''}`);
+    }
   } catch (error) {
     console.error("导入失败:", error);
-    message.error("导入失败");
+    const errorMsg = error.response?.data?.error || error.message || "导入失败";
+    message.error(errorMsg);
   } finally {
     importing.value = false;
   }
@@ -1275,7 +1290,8 @@ const importBookmarks = async () => {
     }
   } catch (error) {
     console.error("导入书签失败:", error);
-    message.error("导入书签失败");
+    const errorMsg = error.response?.data?.error || error.message || "导入书签失败";
+    message.error(errorMsg);
   } finally {
     importingBookmarks.value = false;
   }
@@ -1284,6 +1300,7 @@ const importBookmarks = async () => {
 const importSelectedBookmarks = async () => {
   importingBookmarks.value = true;
   let imported = 0;
+  let failedBookmarks = [];
   try {
     for (const url of selectedBookmarks.value) {
       const bookmark = scannedBookmarks.value.find((b) => b.url === url);
@@ -1302,14 +1319,22 @@ const importSelectedBookmarks = async () => {
           imported++;
         } catch (e) {
           console.error("导入书签失败:", e);
+          const errorMsg = e.response?.data?.error || e.message || "导入失败";
+          failedBookmarks.push(`${bookmark.name}: ${errorMsg}`);
         }
       }
     }
     showBookmarkModal.value = false;
-    message.success(`成功导入 ${imported} 个书签`);
+    if (imported > 0) {
+      message.success(`成功导入 ${imported} 个书签`);
+    }
+    if (failedBookmarks.length > 0) {
+      message.warning(`部分书签导入失败: ${failedBookmarks.slice(0, 3).join(', ')}${failedBookmarks.length > 3 ? '...' : ''}`);
+    }
   } catch (error) {
     console.error("导入失败:", error);
-    message.error("导入失败");
+    const errorMsg = error.response?.data?.error || error.message || "导入失败";
+    message.error(errorMsg);
   } finally {
     importingBookmarks.value = false;
   }
@@ -1381,7 +1406,8 @@ const handleDrop = async (e, targetIndex) => {
     message.success('排序已更新');
   } catch (error) {
     console.error('更新排序失败:', error);
-    message.error('更新排序失败');
+    const errorMsg = error.response?.data?.error || error.message || '更新排序失败';
+    message.error(errorMsg);
   }
   
   dragOverIndex.value = -1;
