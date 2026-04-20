@@ -127,10 +127,12 @@
                 class="results-container"
                 v-if="isInputFocused && quickResults.length > 0"
                 :class="{ 'dark-mode': isDarkMode }"
+                ref="resultsContainerRef"
               >
                 <div
                   v-for="(item, index) in quickResults"
                   :key="item.type + '-' + item.id"
+                  :ref="el => resultItemRefs[index] = el"
                   :class="[
                     'result-item',
                     { selected: index === selectedResultIndex }
@@ -162,6 +164,9 @@
                     /></n-icon>
                     <n-icon v-else-if="item.type === 'default-search'" size="20"
                       ><SearchOutline
+                    /></n-icon>
+                    <n-icon v-else-if="item.type === 'direct-url'" size="20"
+                      ><GlobeOutline
                     /></n-icon>
                     <n-icon v-else size="20"><CodeSlashOutline /></n-icon>
                   </div>
@@ -253,7 +258,8 @@ import {
   CodeSlashOutline,
   EnterOutline,
   ArrowBackOutline,
-  DocumentOutline
+  DocumentOutline,
+  GlobeOutline
 } from "@vicons/ionicons5";
 import TitleBar from "./components/TitleBar.vue";
 import Sidebar from "./components/Sidebar.vue";
@@ -279,6 +285,8 @@ const quickLaunchRef = ref(null);
 const isInputFocused = ref(false);
 const showShortcutHelp = ref(false);
 const globalShortcut = ref("Ctrl+Shift+Space");
+const resultsContainerRef = ref(null);
+const resultItemRefs = ref([]);
 
 const truncateUrl = (url, maxLength = 40) => {
   if (!url) return '';
@@ -291,6 +299,31 @@ const truncateUrl = (url, maxLength = 40) => {
     if (url.length <= maxLength) return url;
     return url.substring(0, maxLength) + '...';
   }
+};
+
+const isValidUrl = (str) => {
+  try {
+    if (str.startsWith('http://') || str.startsWith('https://')) {
+      new URL(str);
+      return true;
+    }
+    const urlWithProtocol = 'https://' + str;
+    const url = new URL(urlWithProtocol);
+    const hostname = url.hostname;
+    if (hostname.includes('.') && hostname.split('.').pop().length >= 2) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+};
+
+const normalizeUrl = (str) => {
+  if (str.startsWith('http://') || str.startsWith('https://')) {
+    return str;
+  }
+  return 'https://' + str;
 };
 
 const quickResults = computed(() => {
@@ -401,14 +434,25 @@ const quickResults = computed(() => {
   });
 
   if (results.length === 0 && query) {
-    results.push({
-      id: 'default-search',
-      type: 'default-search',
-      typeLabel: '搜索',
-      name: `在浏览器中搜索: ${query}`,
-      subtitle: '必应搜索',
-      searchTerm: query
-    });
+    if (isValidUrl(query)) {
+      results.push({
+        id: 'direct-url',
+        type: 'direct-url',
+        typeLabel: '访问',
+        name: `访问: ${query}`,
+        subtitle: normalizeUrl(query),
+        url: normalizeUrl(query)
+      });
+    } else {
+      results.push({
+        id: 'default-search',
+        type: 'default-search',
+        typeLabel: '搜索',
+        name: `在浏览器中搜索: ${query}`,
+        subtitle: '必应搜索',
+        searchTerm: query
+      });
+    }
   }
 
   return results.slice(0, 8);
@@ -438,7 +482,9 @@ const updateWindowSize = () => {
 
 const handleQuickResultSelect = (item) => {
   quickSearchQuery.value = '';
-  if (item.type === 'default-search' && item.searchTerm) {
+  if (item.type === 'direct-url' && item.url) {
+    window.electronAPI?.openExternal(item.url);
+  } else if (item.type === 'default-search' && item.searchTerm) {
     const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(item.searchTerm)}`;
     window.electronAPI?.openExternal(searchUrl);
   } else if (item.isSearch && item.search_url && item.searchTerm) {
@@ -511,9 +557,23 @@ const backToQuickSearch = () => {
 
 watch(quickSearchQuery, () => {
   selectedResultIndex.value = 0;
+  resultItemRefs.value = [];
   if (isInputFocused.value) {
     nextTick(updateWindowSize);
   }
+});
+
+const scrollToSelectedResult = () => {
+  nextTick(() => {
+    const selectedItem = resultItemRefs.value[selectedResultIndex.value];
+    if (selectedItem && resultsContainerRef.value) {
+      selectedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  });
+};
+
+watch(selectedResultIndex, () => {
+  scrollToSelectedResult();
 });
 
 watch(quickResults, () => {
@@ -760,6 +820,7 @@ onUnmounted(() => {
   border-bottom-left-radius: 10px;
   border-bottom-right-radius: 10px;
   overflow-y: auto;
+  max-height: 320px;
   transition: background 0.3s, box-shadow 0.3s;
 }
 

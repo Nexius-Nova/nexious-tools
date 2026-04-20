@@ -183,17 +183,6 @@
               </n-checkbox>
             </n-space>
           </n-form-item>
-
-          <n-form-item label="设为默认">
-            <n-switch
-              v-model:value="modelForm.is_default"
-              :true-value="1"
-              :false-value="0"
-            >
-              <template #checked>是</template>
-              <template #unchecked>否</template>
-            </n-switch>
-          </n-form-item>
         </n-form>
 
         <template #footer>
@@ -359,11 +348,10 @@ const modelForm = reactive({
   provider: "openai",
   api_key: "",
   base_url: "",
-  model: "",
-  is_enabled: 1,
-  is_default: 0
+  model: ""
 });
 const modelTesting = ref(false);
+const showApiKey = ref(false);
 
 const providerOptions = [
   { label: "OpenAI", value: "openai" },
@@ -375,6 +363,7 @@ const providerOptions = [
   { label: "百度文心", value: "baidu" },
   { label: "腾讯混元", value: "tencent" },
   { label: "硅基流动", value: "siliconflow" },
+  { label: "OpenRouter", value: "openrouter" },
   { label: "自定义", value: "custom" }
 ];
 
@@ -706,9 +695,7 @@ const openAddModel = () => {
     provider: "openai",
     api_key: "",
     base_url: providerPresets.openai.base_url,
-    model: providerPresets.openai.default_model,
-    is_enabled: 1,
-    is_default: aiModels.value.length === 0 ? 1 : 0
+    model: providerPresets.openai.default_model
   });
   currentModelOptions.value = providerPresets.openai.models;
   isCustomModel.value = false;
@@ -722,9 +709,7 @@ const openEditModel = (model) => {
     provider: model.provider,
     api_key: model.api_key,
     base_url: model.base_url || "",
-    model: model.model,
-    is_enabled: Number(model.is_enabled) || 0,
-    is_default: Number(model.is_default) || 0
+    model: model.model
   });
   const preset = providerPresets[model.provider];
   if (preset) {
@@ -753,10 +738,11 @@ const saveModel = async () => {
       message.success("模型配置已添加");
     }
     showModelModal.value = false;
-    loadAiModels();
+    await loadAiModels();
   } catch (error) {
     console.error("保存模型配置失败:", error);
-    message.error("保存失败");
+    const errorMsg = error.response?.data?.error || error.message || "保存失败";
+    message.error(errorMsg);
   }
 };
 
@@ -770,10 +756,11 @@ const deleteModel = async (model) => {
       try {
         await aiModelsApi.delete(model.id);
         message.success("已删除");
-        loadAiModels();
+        await loadAiModels();
       } catch (error) {
         console.error("删除失败:", error);
-        message.error("删除失败");
+        const errorMsg = error.response?.data?.error || error.message || "删除失败";
+        message.error(errorMsg);
       }
     }
   });
@@ -783,20 +770,23 @@ const setDefaultModel = async (model) => {
   try {
     await aiModelsApi.setDefault(model.id);
     message.success(`已将 "${model.name}" 设为默认模型`);
-    loadAiModels();
+    await loadAiModels();
   } catch (error) {
     console.error("设置默认模型失败:", error);
-    message.error("设置失败");
+    const errorMsg = error.response?.data?.error || error.message || "设置失败";
+    message.error(errorMsg);
   }
 };
 
 const toggleModel = async (model) => {
   try {
     await aiModelsApi.toggle(model.id);
-    loadAiModels();
+    message.success(model.is_enabled ? "已禁用模型" : "已启用模型");
+    await loadAiModels();
   } catch (error) {
     console.error("切换状态失败:", error);
-    message.error("操作失败");
+    const errorMsg = error.response?.data?.error || error.message || "操作失败";
+    message.error(errorMsg);
   }
 };
 
@@ -1062,10 +1052,11 @@ const doImport = async (data, mode) => {
 
     message.success(mode === "overwrite" ? "数据覆盖导入成功" : "数据增量导入成功");
     loadSettings();
-    loadAiModels();
+    await loadAiModels();
   } catch (error) {
     console.error("导入数据失败:", error);
-    message.error("导入失败");
+    const errorMsg = error.response?.data?.error || error.message || "导入失败";
+    message.error(errorMsg);
   } finally {
     importing.value = false;
   }

@@ -49,6 +49,7 @@
               <n-icon v-else-if="item.type === 'password'" size="18"><KeyOutline /></n-icon>
               <n-icon v-else-if="item.type === 'document'" size="18"><DocumentOutline /></n-icon>
               <n-icon v-else-if="item.type === 'default-search'" size="18"><SearchOutline /></n-icon>
+              <n-icon v-else-if="item.type === 'direct-url'" size="18"><GlobeOutline /></n-icon>
               <n-icon v-else size="18"><CodeSlashOutline /></n-icon>
             </div>
             <div class="command-content">
@@ -133,7 +134,7 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { NModal, NIcon, NTag, NDescriptions, NDescriptionsItem, NText, NButton, NSpace, NCode, NAvatar, useMessage } from 'naive-ui'
-import { SearchOutline, KeyOutline, CodeSlashOutline, DocumentOutline } from '@vicons/ionicons5'
+import { SearchOutline, KeyOutline, CodeSlashOutline, DocumentOutline, GlobeOutline } from '@vicons/ionicons5'
 import { useTheme } from '../store/theme'
 import { useData } from '../store/data'
 
@@ -174,6 +175,31 @@ const detailTitle = computed(() => {
   if (detailItem.value.type === 'snippet') return '代码片段详情'
   return ''
 })
+
+const isValidUrl = (str) => {
+  try {
+    if (str.startsWith('http://') || str.startsWith('https://')) {
+      new URL(str)
+      return true
+    }
+    const urlWithProtocol = 'https://' + str
+    const url = new URL(urlWithProtocol)
+    const hostname = url.hostname
+    if (hostname.includes('.') && hostname.split('.').pop().length >= 2) {
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+const normalizeUrl = (str) => {
+  if (str.startsWith('http://') || str.startsWith('https://')) {
+    return str
+  }
+  return 'https://' + str
+}
 
 const filteredResults = computed(() => {
   const results = []
@@ -293,14 +319,25 @@ const filteredResults = computed(() => {
   })
   
   if (results.length === 0 && query) {
-    results.push({
-      id: 'default-search',
-      type: 'default-search',
-      typeLabel: '搜索',
-      name: `在浏览器中搜索: ${query}`,
-      subtitle: '必应搜索',
-      searchTerm: query
-    })
+    if (isValidUrl(query)) {
+      results.push({
+        id: 'direct-url',
+        type: 'direct-url',
+        typeLabel: '访问',
+        name: `访问: ${query}`,
+        subtitle: normalizeUrl(query),
+        url: normalizeUrl(query)
+      })
+    } else {
+      results.push({
+        id: 'default-search',
+        type: 'default-search',
+        typeLabel: '搜索',
+        name: `在浏览器中搜索: ${query}`,
+        subtitle: '必应搜索',
+        searchTerm: query
+      })
+    }
   }
   
   return results.slice(0, 8)
@@ -341,7 +378,11 @@ const handleKeydown = (e) => {
 
 const selectItem = async (item) => {
   searchQuery.value = ''
-  if (item.type === 'default-search' && item.searchTerm) {
+  if (item.type === 'direct-url' && item.url) {
+    window.electronAPI?.openExternal(item.url)
+    emit('close')
+    showModal.value = false
+  } else if (item.type === 'default-search' && item.searchTerm) {
     const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(item.searchTerm)}`
     window.electronAPI?.openExternal(searchUrl)
     emit('close')

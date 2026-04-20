@@ -26,14 +26,13 @@ router.get('/:id', async (req, res) => {
 })
 
 router.post('/', async (req, res) => {
-  const { name, provider, api_key, base_url, model, is_enabled = 1, is_default = 0 } = req.body
+  const { name, provider, api_key, base_url, model } = req.body
   
   if (!name || !provider || !api_key || !model) {
     return res.status(400).json({ error: '名称、提供商、API Key 和模型名称为必填项' })
   }
   
   try {
-    // 检查 name 是否重复
     const existing = await queryOne(
       'SELECT id FROM ai_models WHERE name = ?',
       [name]
@@ -42,13 +41,11 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: `已存在名称为"${name}"的AI模型配置` })
     }
     
-    if (is_default === 1) {
-      await execute('UPDATE ai_models SET is_default = 0')
-    }
+    await execute('UPDATE ai_models SET is_enabled = 0, is_default = 0')
     
     const result = await execute(
-      'INSERT INTO ai_models (name, provider, api_key, base_url, model, is_enabled, is_default) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [name, provider, api_key, base_url || null, model, is_enabled, is_default]
+      'INSERT INTO ai_models (name, provider, api_key, base_url, model, is_enabled, is_default) VALUES (?, ?, ?, ?, ?, 1, 1)',
+      [name, provider, api_key, base_url || null, model]
     )
     
     const newModel = await queryOne('SELECT * FROM ai_models WHERE id = ?', [result.lastInsertRowid])
@@ -60,7 +57,7 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   const { id } = req.params
-  const { name, provider, api_key, base_url, model, is_enabled, is_default } = req.body
+  const { name, provider, api_key, base_url, model } = req.body
   
   try {
     const existing = await queryOne('SELECT * FROM ai_models WHERE id = ?', [id])
@@ -68,7 +65,6 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: '模型配置不存在' })
     }
     
-    // 检查 name 是否重复（排除当前记录）
     const checkName = name ?? existing.name
     const duplicateName = await queryOne(
       'SELECT id FROM ai_models WHERE name = ? AND id != ?',
@@ -78,20 +74,14 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: `已存在名称为"${checkName}"的AI模型配置` })
     }
     
-    if (is_default === 1) {
-      await execute('UPDATE ai_models SET is_default = 0')
-    }
-    
     await execute(
-      'UPDATE ai_models SET name = ?, provider = ?, api_key = ?, base_url = ?, model = ?, is_enabled = ?, is_default = ? WHERE id = ?',
+      'UPDATE ai_models SET name = ?, provider = ?, api_key = ?, base_url = ?, model = ? WHERE id = ?',
       [
         name ?? existing.name,
         provider ?? existing.provider,
         api_key ?? existing.api_key,
         base_url !== undefined ? base_url : existing.base_url,
         model ?? existing.model,
-        is_enabled !== undefined ? is_enabled : existing.is_enabled,
-        is_default !== undefined ? is_default : existing.is_default,
         id
       ]
     )
@@ -128,8 +118,8 @@ router.post('/:id/set-default', async (req, res) => {
       return res.status(404).json({ error: '模型配置不存在' })
     }
     
-    await execute('UPDATE ai_models SET is_default = 0')
-    await execute('UPDATE ai_models SET is_default = 1 WHERE id = ?', [id])
+    await execute('UPDATE ai_models SET is_default = 0, is_enabled = 0')
+    await execute('UPDATE ai_models SET is_default = 1, is_enabled = 1 WHERE id = ?', [id])
     
     res.json({ success: true })
   } catch (error) {
@@ -147,7 +137,13 @@ router.post('/:id/toggle', async (req, res) => {
     }
     
     const newStatus = existing.is_enabled ? 0 : 1
-    await execute('UPDATE ai_models SET is_enabled = ? WHERE id = ?', [newStatus, id])
+    
+    if (newStatus === 1) {
+      await execute('UPDATE ai_models SET is_enabled = 0')
+      await execute('UPDATE ai_models SET is_enabled = 1, is_default = 1 WHERE id = ?', [id])
+    } else {
+      await execute('UPDATE ai_models SET is_enabled = 0, is_default = 0 WHERE id = ?', [id])
+    }
     
     res.json({ success: true, is_enabled: newStatus })
   } catch (error) {
