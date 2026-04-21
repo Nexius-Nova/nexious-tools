@@ -48,11 +48,21 @@
 
       <n-modal v-model:show="showAppSelector" preset="card" title="选择应用" style="width: 700px; max-height: 80vh;">
         <n-space vertical style="width: 100%">
-          <n-input v-model:value="appSearchKeyword" placeholder="搜索应用..." clearable>
-            <template #prefix>
-              <n-icon><SearchOutline /></n-icon>
-            </template>
-          </n-input>
+          <n-space :size="8" align="center">
+            <n-select
+              v-model:value="appSourceFilter"
+              size="small"
+              style="width: 130px"
+              :options="appSourceOptions"
+              placeholder="筛选来源"
+              clearable
+            />
+            <n-input v-model:value="appSearchKeyword" placeholder="搜索应用..." clearable style="flex: 1">
+              <template #prefix>
+                <n-icon><SearchOutline /></n-icon>
+              </template>
+            </n-input>
+          </n-space>
           <n-scrollbar style="max-height: 400px;">
             <div class="app-grid">
               <div 
@@ -67,7 +77,15 @@
                 </div>
                 <div class="app-info">
                   <div class="app-name">{{ app.name }}</div>
-                  <div class="app-path" :title="app.path">{{ app.path ? truncatePath(app.path) : '运行中' }}</div>
+                  <!-- <div class="app-path" :title="app.path">{{ truncatePath(app.path) }}</div> -->
+                  <n-tag
+                    size="tiny"
+                    :bordered="false"
+                    :type="getSourceTagType(app.source)"
+                    style="margin-top: 2px; font-size: 10px; height: 16px; padding: 0 4px;"
+                  >
+                    {{ getSourceLabel(app.source) }}
+                  </n-tag>
                 </div>
               </div>
             </div>
@@ -204,6 +222,10 @@ const props = defineProps({
   show: {
     type: Boolean,
     default: false
+  },
+  existingApps: {
+    type: Object,
+    default: () => ({ paths: new Set(), names: new Set() })
   }
 })
 
@@ -220,6 +242,22 @@ const showAppSelector = ref(false)
 const loadingApps = ref(false)
 const installedApps = ref([])
 const appSearchKeyword = ref('')
+const appSourceFilter = ref(null)
+const appSourceOptions = [
+  { label: '桌面快捷方式', value: 'desktop' },
+  { label: '开始菜单', value: 'startmenu' },
+  { label: '注册表', value: 'registry' }
+]
+
+const getSourceLabel = (source) => {
+  const map = { desktop: '桌面', startmenu: '开始菜单', registry: '注册表' }
+  return map[source] || source || '未知'
+}
+
+const getSourceTagType = (source) => {
+  const map = { desktop: 'info', startmenu: 'success', registry: 'warning' }
+  return map[source] || 'default'
+}
 
 const searchTemplates = [
   { name: '淘宝', alias: 'tb', url: 'https://s.taobao.com/search?q={query}' },
@@ -282,12 +320,19 @@ const appPathRule = computed(() => ({
 }))
 
 const filteredInstalledApps = computed(() => {
-  if (!appSearchKeyword.value) return installedApps.value
-  const keyword = appSearchKeyword.value.toLowerCase()
-  return installedApps.value.filter(app => 
-    app.name?.toLowerCase().includes(keyword) ||
-    app.path?.toLowerCase().includes(keyword)
-  )
+  let result = installedApps.value
+  if (appSourceFilter.value) {
+    result = result.filter(app => app.source === appSourceFilter.value)
+  }
+  if (appSearchKeyword.value) {
+    const keyword = appSearchKeyword.value.toLowerCase()
+    result = result.filter(app => 
+      app.name?.toLowerCase().includes(keyword) ||
+      app.path?.toLowerCase().includes(keyword) ||
+      app.publisher?.toLowerCase().includes(keyword)
+    )
+  }
+  return result
 })
 
 const typeLabel = computed(() => {
@@ -440,8 +485,17 @@ const loadInstalledApps = async () => {
   try {
     const apps = await window.electronAPI?.autoImportApps()
     if (apps && apps.length > 0) {
-      installedApps.value = apps
-      showAppSelector.value = true
+      const { paths, names } = props.existingApps
+      installedApps.value = apps.filter(app => {
+        const appPath = app.path?.toLowerCase()
+        const appName = app.name?.toLowerCase()
+        return !paths.has(appPath) && !names.has(appName)
+      })
+      if (installedApps.value.length > 0) {
+        showAppSelector.value = true
+      } else {
+        message.info('所有应用已导入过')
+      }
     } else {
       message.warning('未找到已安装的应用')
     }
@@ -639,7 +693,7 @@ const handleSubmit = () => {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  max-width: calc(100% - 60px);
+  max-width: 200px;
 }
 
 .app-name {

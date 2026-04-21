@@ -1,19 +1,32 @@
 <template>
-  <aside class="sidebar">
+  <n-layout-sider
+    bordered
+    collapse-mode="width"
+    :collapsed-width="48"
+    :width="150"
+    :collapsed="collapsed"
+    show-trigger
+    @collapse="$emit('collapse')"
+    @expand="$emit('expand')"
+    class="sidebar-sider"
+  >
     <n-menu
       :value="activeTab"
+      :collapsed="collapsed"
+      :collapsed-width="48"
+      :collapsed-icon-size="20"
       :options="menuOptions"
       @update:value="handleMenuChange"
     />
-    <div class="sidebar-footer">
+    <div class="sidebar-footer" v-show="!collapsed">
       <n-text depth="3" style="font-size: 11px;">v1.0.0</n-text>
     </div>
-  </aside>
+  </n-layout-sider>
 </template>
 
 <script setup>
 import { h } from 'vue'
-import { NMenu, NText, NIcon } from 'naive-ui'
+import { NMenu, NText, NIcon, NLayoutSider } from 'naive-ui'
 import { 
   GlobeOutline, 
   LockClosedOutline, 
@@ -27,10 +40,14 @@ const props = defineProps({
   activeTab: {
     type: String,
     default: 'websites'
+  },
+  collapsed: {
+    type: Boolean,
+    default: true
   }
 })
 
-const emit = defineEmits(['changeTab'])
+const emit = defineEmits(['changeTab', 'collapse', 'expand'])
 
 const renderIcon = (icon) => {
   return () => h(NIcon, null, { default: () => h(icon) })
@@ -75,17 +92,17 @@ const handleMenuChange = (key) => {
 </script>
 
 <style scoped>
-.sidebar {
-  width: 150px;
+.sidebar-sider {
   background: var(--sidebar-bg);
-  border-right: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
 }
 
 .sidebar-footer {
-  margin-top: auto;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
   padding: 12px;
   text-align: center;
+  pointer-events: none;
 }
 </style>

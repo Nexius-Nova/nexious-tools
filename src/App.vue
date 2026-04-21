@@ -8,33 +8,41 @@
         <div class="app-container" :class="{ 'full-app': showFullApp }">
           <template v-if="showFullApp">
             <TitleBar />
-            <div class="main-wrapper">
-              <Sidebar :activeTab="currentTab" @changeTab="changeTab" />
-              <main class="content-area">
-                <div class="content-header" v-if="showBackButton">
-                  <n-button text @click="backToQuickSearch" class="back-btn">
-                    <template #icon>
-                      <n-icon><ArrowBackOutline /></n-icon>
-                    </template>
-                    返回快速搜索窗
-                  </n-button>
-                </div>
-                <router-view v-slot="{ Component }">
-                  <transition name="page-fade" mode="out-in">
-                    <suspense>
-                      <template #default>
-                        <component :is="Component" />
+            <n-layout has-sider class="main-layout">
+              <Sidebar 
+                :activeTab="currentTab" 
+                :collapsed="sidebarCollapsed"
+                @changeTab="changeTab"
+                @collapse="sidebarCollapsed = true"
+                @expand="sidebarCollapsed = false"
+              />
+              <n-layout>
+                <n-layout-content class="content-area">
+                  <div class="content-header" v-if="showBackButton">
+                    <n-button text @click="backToQuickSearch" class="back-btn">
+                      <template #icon>
+                        <n-icon><ArrowBackOutline /></n-icon>
                       </template>
-                      <template #fallback>
-                        <div class="page-loading">
-                          <n-spin size="medium" />
-                        </div>
-                      </template>
-                    </suspense>
-                  </transition>
-                </router-view>
-              </main>
-            </div>
+                      返回快速搜索窗
+                    </n-button>
+                  </div>
+                  <router-view v-slot="{ Component }">
+                    <transition name="page-fade" mode="out-in">
+                      <suspense>
+                        <template #default>
+                          <component :is="Component" />
+                        </template>
+                        <template #fallback>
+                          <div class="page-loading">
+                            <n-spin size="medium" />
+                          </div>
+                        </template>
+                      </suspense>
+                    </transition>
+                  </router-view>
+                </n-layout-content>
+              </n-layout>
+            </n-layout>
           </template>
 
           <template v-else>
@@ -249,6 +257,8 @@ import {
   NAvatar,
   NSpin,
   NModal,
+  NLayout,
+  NLayoutContent,
   darkTheme
 } from "naive-ui";
 import {
@@ -276,6 +286,7 @@ const currentTab = ref("websites");
 const showQuickSearch = ref(false);
 const showFullApp = ref(false);
 const showBackButton = ref(false);
+const sidebarCollapsed = ref(true);
 
 const quickSearchInput = ref(null);
 const quickSearchQuery = ref("");
@@ -716,14 +727,12 @@ onUnmounted(() => {
   background-color: var(--bg-color);
 }
 
-.main-wrapper {
-  display: flex;
+.main-layout {
   flex: 1;
   overflow: hidden;
 }
 
 .content-area {
-  flex: 1;
   padding: 24px;
   overflow-y: auto;
   background-color: var(--bg-color);
