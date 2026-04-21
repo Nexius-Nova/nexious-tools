@@ -402,13 +402,16 @@ function extractIconWithExtractor(iconPath) {
     }
     
     const timeout = setTimeout(() => {
+      iconExtractor.emitter.removeListener("icon", handler)
+      iconExtractor.emitter.removeListener("error", errorHandler)
       resolve(null)
-    }, 3000)
+    }, 1500)
     
     const handler = (data) => {
       if (data.Context === cleanPath) {
         clearTimeout(timeout)
         iconExtractor.emitter.removeListener("icon", handler)
+        iconExtractor.emitter.removeListener("error", errorHandler)
         if (data.Base64ImageData) {
           resolve(`data:image/png;base64,${data.Base64ImageData}`)
         } else {
@@ -419,6 +422,7 @@ function extractIconWithExtractor(iconPath) {
     
     const errorHandler = (err) => {
       clearTimeout(timeout)
+      iconExtractor.emitter.removeListener("icon", handler)
       iconExtractor.emitter.removeListener("error", errorHandler)
       resolve(null)
     }
@@ -431,70 +435,296 @@ function extractIconWithExtractor(iconPath) {
 
 ipcMain.handle("auto-import-apps", async () => {
   const apps = []
+  const seenPaths = new Set()
   const seenNames = new Set()
   
   if (process.platform === "win32") {
-    try {
-      const desktopApps = await getDesktopShortcuts()
-      
-      for (const app of desktopApps) {
-        if (!seenNames.has(app.name)) {
-          seenNames.add(app.name)
-          apps.push({
-            name: app.name,
-            path: app.path,
-            icon: app.icon,
-            type: "desktop"
-          })
-        }
+    const [desktopApps, startMenuApps, registryApps] = await Promise.all([
+      getDesktopShortcuts(),
+      getStartMenuShortcuts(),
+      getRegistryApps()
+    ])
+
+    for (const app of desktopApps) {
+      const normalPath = app.path.toLowerCase()
+      if (!seenPaths.has(normalPath) && !seenNames.has(app.name.toLowerCase())) {
+        seenPaths.add(normalPath)
+        seenNames.add(app.name.toLowerCase())
+        apps.push({ ...app, source: "desktop" })
       }
-    } catch (e) {
-      console.error("获取桌面快捷方式失败:", e.message)
+    }
+
+    for (const app of startMenuApps) {
+      const normalPath = app.path.toLowerCase()
+      if (!seenPaths.has(normalPath) && !seenNames.has(app.name.toLowerCase())) {
+        seenPaths.add(normalPath)
+        seenNames.add(app.name.toLowerCase())
+        apps.push({ ...app, source: "startmenu" })
+      }
+    }
+
+    for (const app of registryApps) {
+      const normalPath = app.path.toLowerCase()
+      if (!seenPaths.has(normalPath) && !seenNames.has(app.name.toLowerCase())) {
+        seenPaths.add(normalPath)
+        seenNames.add(app.name.toLowerCase())
+        apps.push({ ...app, source: "registry" })
+      }
     }
   }
   
   return apps
 })
 
-async function getDesktopShortcuts() {
+async function parseLnkDirectory(dirPath) {
   const shortcuts = []
-  const desktopDir = app.getPath("desktop")
-  
-  if (!fs.existsSync(desktopDir)) {
+  if (!fs.existsSync(dirPath)) return shortcuts
+
+  let files
+  try {
+    files = fs.readdirSync(dirPath)
+  } catch (e) {
     return shortcuts
   }
-  
-  const files = fs.readdirSync(desktopDir)
-  
+
+  const lnkFiles = []
   for (const file of files) {
-    if (!file.endsWith(".lnk")) continue
-    
-    const lnkPath = path.join(desktopDir, file)
-    
+    const fullPath = path.join(dirPath, file)
+
+    let stat
     try {
-      const shortcutDetails = shell.readShortcutLink(lnkPath)
-      const realPath = shortcutDetails.target
-      
-      if (!realPath || !fs.existsSync(realPath)) continue
-      
-      let iconBase64 = ""
-      try {
-        iconBase64 = await extractIconWithExtractor(realPath)
-      } catch (e) {
-        console.error("提取图标失败:", e.message)
-      }
-      
-      shortcuts.push({
-        name: file.replace(".lnk", ""),
-        path: realPath,
-        icon: iconBase64 || ""
-      })
+      stat = fs.statSync(fullPath)
     } catch (e) {
-      console.error("解析快捷方式失败:", lnkPath, e.message)
+      continue
+    }
+
+    if (stat.isDirectory()) {
+      const subShortcuts = await parseLnkDirectory(fullPath)
+      shortcuts.push(...subShortcuts)
+      continue
+    }
+
+    if (file.endsWith(".lnk")) {
+      lnkFiles.push({ file, fullPath })
     }
   }
-  
+
+  const lnkPromises = lnkFiles.map(async ({ file, fullPath }) => {
+    try {
+      const shortcutDetails = shell.readShortcutLink(fullPath)
+      const realPath = shortcutDetails.target
+
+      if (!realPath || !fs.existsSync(realPath)) return null
+      if (!realPath.toLowerCase().endsWith(".exe")) return null
+
+      return {
+        name: file.replace(".lnk", ""),
+        path: realPath,
+        icon: ""
+      }
+    } catch (e) {
+      return null
+    }
+  })
+
+  const lnkResults = (await Promise.all(lnkPromises)).filter(Boolean)
+  shortcuts.push(...lnkResults)
+
+  const iconPromises = shortcuts.slice(0, 50).map(async (shortcut) => {
+    try {
+      shortcut.icon = await extractIconWithExtractor(shortcut.path) || ""
+    } catch (e) {
+      // ignore
+    }
+  })
+  await Promise.all(iconPromises)
+
   return shortcuts
+}
+
+async function getDesktopShortcuts() {
+  const desktopDir = app.getPath("desktop")
+  return parseLnkDirectory(desktopDir)
+}
+
+async function getStartMenuShortcuts() {
+  const shortcuts = []
+  const startMenuDirs = [
+    path.join(process.env.APPDATA || "", "Microsoft", "Windows", "Start Menu", "Programs"),
+    path.join("C:", "ProgramData", "Microsoft", "Windows", "Start Menu", "Programs")
+  ]
+
+  for (const dir of startMenuDirs) {
+    const apps = await parseLnkDirectory(dir)
+    shortcuts.push(...apps)
+  }
+
+  return shortcuts
+}
+
+async function getRegistryApps() {
+  const apps = []
+  const regKeys = [
+    "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+    "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+    "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
+  ]
+
+  const seenNames = new Set()
+  const subkeyPromises = regKeys.map(key => queryRegSubkeys(key))
+  const allSubkeys = await Promise.all(subkeyPromises)
+  const subkeys = allSubkeys.flat()
+
+  const batchSize = 50
+  for (let i = 0; i < subkeys.length; i += batchSize) {
+    const batch = subkeys.slice(i, i + batchSize)
+    const valuePromises = batch.map(subkey => 
+      queryRegValues(subkey).then(values => ({ subkey, values }))
+    )
+    const results = await Promise.all(valuePromises)
+    
+    for (const { values } of results) {
+      try {
+        const displayName = values["DisplayName"]
+        if (!displayName || seenNames.has(displayName.toLowerCase())) continue
+
+        const displayIcon = values["DisplayIcon"]
+        const installLocation = values["InstallLocation"]
+        const displayVersion = values["DisplayVersion"]
+        const publisher = values["Publisher"]
+        const systemComponent = values["SystemComponent"]
+        const releaseType = values["ReleaseType"]
+        const parentDisplayName = values["ParentDisplayName"]
+
+        if (systemComponent === "0x1" || releaseType || parentDisplayName) continue
+        if (publisher && /microsoft|windows|update|patch|security/i.test(publisher) && /update|patch|security|framework|runtime/i.test(displayName)) continue
+
+        let exePath = ""
+        if (displayIcon) {
+          const iconPath = displayIcon.split(",")[0].trim().replace(/^["']|["']$/g, "")
+          if (iconPath && fs.existsSync(iconPath)) {
+            exePath = iconPath
+          }
+        }
+
+        if (!exePath && installLocation) {
+          const cleanInstall = installLocation.replace(/^["']|["']$/g, "")
+          if (fs.existsSync(cleanInstall)) {
+            const exeFiles = findExeInDir(cleanInstall)
+            if (exeFiles.length > 0) {
+              exePath = exeFiles[0]
+            }
+          }
+        }
+
+        if (!exePath) continue
+        if (!exePath.toLowerCase().endsWith(".exe")) continue
+        if (!fs.existsSync(exePath)) continue
+
+        seenNames.add(displayName.toLowerCase())
+
+        apps.push({
+          name: displayName,
+          path: exePath,
+          icon: "",
+          version: displayVersion || "",
+          publisher: publisher || ""
+        })
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
+  const iconPromises = apps.slice(0, 100).map(async (app) => {
+    try {
+      app.icon = await extractIconWithExtractor(app.path) || ""
+    } catch (e) {
+      // ignore
+    }
+  })
+  await Promise.all(iconPromises)
+
+  return apps
+}
+
+function queryRegSubkeys(key) {
+  return new Promise((resolve) => {
+    const proc = spawn("cmd", ["/c", "chcp", "65001", ">", "nul", "&&", "reg", "query", key], {
+      shell: false,
+      windowsHide: true
+    })
+    let stdout = ""
+    proc.stdout.on("data", (data) => {
+      stdout += data.toString("utf8")
+    })
+    proc.on("close", () => {
+      const lines = stdout.split("\n").map(l => l.trim()).filter(l => l && l !== key)
+      resolve(lines)
+    })
+    proc.on("error", () => {
+      resolve([])
+    })
+  })
+}
+
+function queryRegValues(key) {
+  return new Promise((resolve) => {
+    const proc = spawn("cmd", ["/c", "chcp", "65001", ">", "nul", "&&", "reg", "query", key], {
+      shell: false,
+      windowsHide: true
+    })
+    let stdout = ""
+    proc.stdout.on("data", (data) => {
+      stdout += data.toString("utf8")
+    })
+    proc.on("close", () => {
+      const values = {}
+      const lines = stdout.split("\n").map(l => l.trim()).filter(Boolean)
+      for (const line of lines) {
+        const match = line.match(/^\s*(\S+)\s+REG_\S+\s+(.+)$/i)
+        if (match) {
+          values[match[1]] = match[2].trim()
+        }
+      }
+      resolve(values)
+    })
+    proc.on("error", () => {
+      resolve({})
+    })
+  })
+}
+
+function findExeInDir(dirPath, maxDepth = 2) {
+  const results = []
+  try {
+    _findExeRecursive(dirPath, results, 0, maxDepth)
+  } catch (e) {
+    // ignore
+  }
+  return results
+}
+
+function _findExeRecursive(dirPath, results, depth, maxDepth) {
+  if (depth > maxDepth || results.length >= 3) return
+  let entries
+  try {
+    entries = fs.readdirSync(dirPath, { withFileTypes: true })
+  } catch (e) {
+    return
+  }
+  for (const entry of entries) {
+    if (results.length >= 3) return
+    if (entry.isFile() && entry.name.toLowerCase().endsWith(".exe")) {
+      const exeName = entry.name.toLowerCase()
+      const dirName = path.basename(dirPath).toLowerCase()
+      if (exeName.includes(dirName) || dirName.includes(exeName.replace(".exe", ""))) {
+        results.push(path.join(dirPath, entry.name))
+      }
+    } else if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name.toLowerCase() !== "uninstall") {
+      _findExeRecursive(path.join(dirPath, entry.name), results, depth + 1, maxDepth)
+    }
+  }
 }
 
 ipcMain.handle("set-global-shortcut", (event, accelerator) => {

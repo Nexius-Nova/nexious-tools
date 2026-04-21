@@ -58,7 +58,7 @@
       <span class="title">Nexious Tools</span>
     </div>
     <div class="title-center">
-      <div class="search-hint"><kbd>Ctrl</kbd> + <kbd>K</kbd> 快速搜索</div>
+      <div class="search-hint"><kbd>Ctrl</kbd> + <kbd>K</kbd> 快速搜索 <span class="hint-divider">|</span> <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>?</kbd> 帮助</div>
     </div>
     <div class="title-right">
       <button class="title-btn minimize" @click="minimize">
@@ -111,7 +111,7 @@ const close = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 40px;
+  height: var(--title-bar-height);
   padding: 0 12px;
   background: var(--card-bg);
   border-bottom: 1px solid var(--border-color);
@@ -158,6 +158,11 @@ const close = () => {
   font-size: 11px;
   font-family: inherit;
   color: var(--text-secondary);
+}
+
+.hint-divider {
+  margin: 0 8px;
+  color: var(--border-color);
 }
 
 .title-right {

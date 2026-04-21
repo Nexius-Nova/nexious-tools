@@ -235,6 +235,7 @@
     <WebsiteModal
       :show="showModal"
       :website="editingItem"
+      :existing-apps="existingAppPaths"
       @close="closeModal"
       @save="handleSave"
     />
@@ -278,17 +279,27 @@
               已选择 {{ selectedApps.length }} 个
             </n-tag>
           </div>
-          <n-input
-            v-model:value="appSearchQuery"
-            placeholder="搜索应用名称..."
-            clearable
-            size="medium"
-            style="width: 240px"
-          >
-            <template #prefix>
-              <n-icon><SearchOutline /></n-icon>
-            </template>
-          </n-input>
+          <n-space :size="8" align="center">
+            <n-select
+              v-model:value="appSourceFilter"
+              size="medium"
+              style="width: 140px"
+              :options="appSourceOptions"
+              placeholder="筛选来源"
+              clearable
+            />
+            <n-input
+              v-model:value="appSearchQuery"
+              placeholder="搜索应用名称..."
+              clearable
+              size="medium"
+              style="width: 200px"
+            >
+              <template #prefix>
+                <n-icon><SearchOutline /></n-icon>
+              </template>
+            </n-input>
+          </n-space>
         </div>
 
         <n-divider style="margin: 12px 0" />
@@ -324,15 +335,17 @@
                 <n-ellipsis class="app-card-name" :line-clamp="1">
                   {{ app.name }}
                 </n-ellipsis>
-                <n-ellipsis class="app-card-path" :line-clamp="1">
-                  {{
-                    app.path
-                      ? truncatePath(app.path)
-                      : app.type === "running"
-                        ? "运行中"
-                        : "已安装"
-                  }}
-                </n-ellipsis>
+                <!-- <n-ellipsis class="app-card-path" :line-clamp="1">
+                  {{ truncatePath(app.path) }}
+                </n-ellipsis> -->
+                <n-tag
+                  size="tiny"
+                  :bordered="false"
+                  :type="getSourceTagType(app.source)"
+                  class="app-source-tag"
+                >
+                  {{ getSourceLabel(app.source) }}
+                </n-tag>
               </div>
               <div v-if="isAppSelected(app)" class="app-card-badge">
                 <n-icon size="16"><CheckmarkCircleOutline /></n-icon>
@@ -565,6 +578,15 @@ const { websites, reloadWebsites, addWebsite, updateWebsite, removeWebsite, load
   useData();
 
 const items = websites;
+const existingAppPaths = computed(() => {
+  const paths = new Set();
+  const names = new Set();
+  items.value.filter((i) => i.type === "app").forEach((i) => {
+    if (i.app_path) paths.add(i.app_path.toLowerCase());
+    if (i.name) names.add(i.name.toLowerCase());
+  });
+  return { paths, names };
+});
 const searchQuery = ref("");
 const showModal = ref(false);
 const editingItem = ref(null);
@@ -579,6 +601,12 @@ const showPreviewModal = ref(false);
 const scannedApps = ref([]);
 const selectedApps = ref([]);
 const appSearchQuery = ref("");
+const appSourceFilter = ref(null);
+const appSourceOptions = [
+  { label: "桌面快捷方式", value: "desktop" },
+  { label: "开始菜单", value: "startmenu" },
+  { label: "注册表", value: "registry" }
+];
 const importingBookmarks = ref(false);
 const showBookmarkModal = ref(false);
 const scannedBookmarks = ref([]);
@@ -623,12 +651,30 @@ watch([activeTab, searchQuery], () => {
 });
 
 const filteredScannedApps = computed(() => {
-  if (!appSearchQuery.value) return scannedApps.value;
-  const query = appSearchQuery.value.toLowerCase();
-  return scannedApps.value.filter((app) =>
-    app.name?.toLowerCase().includes(query)
-  );
+  let result = scannedApps.value;
+  if (appSourceFilter.value) {
+    result = result.filter((app) => app.source === appSourceFilter.value);
+  }
+  if (appSearchQuery.value) {
+    const query = appSearchQuery.value.toLowerCase();
+    result = result.filter(
+      (app) =>
+        app.name?.toLowerCase().includes(query) ||
+        app.publisher?.toLowerCase().includes(query)
+    );
+  }
+  return result;
 });
+
+const getSourceLabel = (source) => {
+  const map = { desktop: "桌面", startmenu: "开始菜单", registry: "注册表" };
+  return map[source] || source || "未知";
+};
+
+const getSourceTagType = (source) => {
+  const map = { desktop: "info", startmenu: "success", registry: "warning" };
+  return map[source] || "default";
+};
 
 const filteredScannedBookmarks = computed(() => {
   if (!bookmarkSearchQuery.value) return scannedBookmarks.value;
@@ -1155,15 +1201,26 @@ const scanApps = async () => {
   try {
     const result = await window.electronAPI?.autoImportApps();
     if (result && result.length > 0) {
-      const existingPaths = new Set(
-        items.value.filter((i) => i.type === "app").map((i) => i.app_path)
-      );
-      scannedApps.value = result.filter((app) => !existingPaths.has(app.path));
+      const { paths: existingPaths, names: existingNames } = existingAppPaths.value;
+      scannedApps.value = result.filter((app) => {
+        const appPath = app.path?.toLowerCase();
+        const appName = app.name?.toLowerCase();
+        return !existingPaths.has(appPath) && !existingNames.has(appName);
+      });
       selectedApps.value = [];
+      appSourceFilter.value = null;
 
       if (scannedApps.value.length === 0) {
         message.info("所有应用已导入过");
       } else {
+        const desktopCount = scannedApps.value.filter(a => a.source === "desktop").length;
+        const startMenuCount = scannedApps.value.filter(a => a.source === "startmenu").length;
+        const registryCount = scannedApps.value.filter(a => a.source === "registry").length;
+        const sourceInfo = [];
+        if (desktopCount) sourceInfo.push(`桌面 ${desktopCount}`);
+        if (startMenuCount) sourceInfo.push(`开始菜单 ${startMenuCount}`);
+        if (registryCount) sourceInfo.push(`注册表 ${registryCount}`);
+        message.info(`扫描完成：${sourceInfo.join("、")}`);
         showPreviewModal.value = true;
       }
     } else {
@@ -1735,6 +1792,14 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+.app-source-tag {
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1;
+  padding: 0 4px;
+  height: 16px;
 }
 
 .app-card-badge {
