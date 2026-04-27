@@ -4,6 +4,10 @@ out/
 .trae/
 dist/
 dist-server/
+.packaging/
+test/
 
 debug.log
 data/*.db
+release/
+server/uploads/*
