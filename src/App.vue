@@ -206,7 +206,7 @@
                 </div>
                 <div class="shortcut-item">
                   <span class="shortcut-desc">打开快捷键帮助</span>
-                  <span class="shortcut-key">?</span>
+                  <span class="shortcut-key">Ctrl+Shift+?</span>
                 </div>
               </div>
               <div class="shortcut-section">
@@ -274,6 +274,7 @@ import {
 import TitleBar from "./components/TitleBar.vue";
 import Sidebar from "./components/Sidebar.vue";
 import QuickSearch from "./components/QuickSearch.vue";
+import { settingsApi } from "./api/settings";
 import { useTheme } from "./store/theme";
 import { useData } from "./store/data";
 
@@ -298,6 +299,29 @@ const showShortcutHelp = ref(false);
 const globalShortcut = ref("Ctrl+Shift+Space");
 const resultsContainerRef = ref(null);
 const resultItemRefs = ref([]);
+
+const formatShortcutLabel = (shortcut) => {
+  if (!shortcut) return "Ctrl+Shift+Space";
+
+  return shortcut
+    .replaceAll("CommandOrControl", "Ctrl")
+    .replaceAll("Plus", "+");
+};
+
+const loadGlobalShortcut = async () => {
+  try {
+    if (window.electronAPI?.getGlobalShortcut) {
+      const shortcut = await window.electronAPI.getGlobalShortcut();
+      globalShortcut.value = formatShortcutLabel(shortcut);
+      return;
+    }
+
+    const response = await settingsApi.get("global_shortcut");
+    globalShortcut.value = formatShortcutLabel(response.data.data);
+  } catch (error) {
+    console.error("加载快捷键失败:", error);
+  }
+};
 
 const truncateUrl = (url, maxLength = 40) => {
   if (!url) return '';
@@ -615,6 +639,12 @@ watch(showFullApp, (val) => {
   }
 });
 
+watch(showShortcutHelp, (visible) => {
+  if (visible) {
+    loadGlobalShortcut();
+  }
+});
+
 const changeTab = (tab) => {
   currentTab.value = tab;
   router.push(`/${tab}`);
@@ -697,6 +727,7 @@ onMounted(() => {
   window.addEventListener("keydown", handleKeydown, true);
   loadTheme();
   loadAllData();
+  loadGlobalShortcut();
   nextTick(() => {
     quickSearchInput.value?.focus();
     updateWindowSize();

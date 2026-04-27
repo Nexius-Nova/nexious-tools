@@ -23,11 +23,12 @@ router.get('/conversations', async (req, res) => {
 router.get('/conversations/:conversationId', async (req, res) => {
   try {
     const rows = await query(
-      'SELECT id, conversation_id, role, content, refs, created_at FROM ai_messages WHERE conversation_id = ? ORDER BY created_at ASC',
+      'SELECT id, conversation_id, role, content, refs, images, created_at FROM ai_messages WHERE conversation_id = ? ORDER BY created_at ASC',
       [req.params.conversationId]
     )
     const messages = rows.map(row => {
       let references = []
+      let images = []
       if (row.refs) {
         try {
           references = typeof row.refs === 'string' ? JSON.parse(row.refs) : row.refs
@@ -36,12 +37,21 @@ router.get('/conversations/:conversationId', async (req, res) => {
           references = []
         }
       }
+      if (row.images) {
+        try {
+          images = typeof row.images === 'string' ? JSON.parse(row.images) : row.images
+        } catch (e) {
+          console.error('解析images失败:', e)
+          images = []
+        }
+      }
       return {
         id: row.id,
         conversation_id: row.conversation_id,
         role: row.role,
         content: row.content,
         references,
+        images,
         created_at: row.created_at
       }
     })
@@ -53,14 +63,15 @@ router.get('/conversations/:conversationId', async (req, res) => {
 })
 
 router.post('/messages', async (req, res) => {
-  const { conversation_id, role, content, references } = req.body
+  const { conversation_id, role, content, references, images } = req.body
   try {
     const refsJson = references ? JSON.stringify(references) : null
+    const imagesJson = images && images.length > 0 ? JSON.stringify(images) : null
     const result = await execute(
-      'INSERT INTO ai_messages (conversation_id, role, content, refs) VALUES (?, ?, ?, ?)',
-      [conversation_id, role, content, refsJson]
+      'INSERT INTO ai_messages (conversation_id, role, content, refs, images) VALUES (?, ?, ?, ?, ?)',
+      [conversation_id, role, content, refsJson, imagesJson]
     )
-    res.json({ data: { id: result.lastInsertRowid || result.insertId, conversation_id, role, content, references } })
+    res.json({ data: { id: result.lastInsertRowid || result.insertId, conversation_id, role, content, references, images } })
   } catch (error) {
     res.status(500).json({ error: error.message })
   }

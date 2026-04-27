@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openApp: (appPath) => ipcRenderer.send('open-app', appPath),
   selectFile: () => ipcRenderer.invoke('select-file'),
   autoImportApps: () => ipcRenderer.invoke('auto-import-apps'),
+  getAppIcons: (appPaths) => ipcRenderer.invoke('get-app-icons', appPaths),
   getExeIcon: (exePath) => ipcRenderer.invoke('get-exe-icon', exePath),
   setGlobalShortcut: (accelerator) => ipcRenderer.invoke('set-global-shortcut', accelerator),
   getGlobalShortcut: () => ipcRenderer.invoke('get-global-shortcut'),

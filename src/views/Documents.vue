@@ -254,44 +254,20 @@
             </div>
           </div>
           <div class="editor-body">
-            <CatalogSidebar
-              :content="currentDoc.content"
-              :scroll-container="editPreviewScrollEl"
-              :editor-id="editPreviewId"
-              :heading-id-generator="mdHeadingId"
-              v-show="showCatalog"
-            />
             <div class="editor-main">
-              <div class="editor-pane">
-                <div class="pane-header">
-                  <span>编辑</span>
-                  <span class="word-count">{{ currentDoc.content?.length || 0 }} 字</span>
-                </div>
-                <div class="pane-content">
-                  <textarea
-                    v-model="currentDoc.content"
-                    class="editor-textarea"
-                    placeholder="开始编写文档..."
-                    @input="onContentChange"
-                  ></textarea>
-                </div>
-              </div>
-              <div class="preview-pane">
-                <div class="pane-header">
-                  <span>预览</span>
-                </div>
-                <div class="pane-content preview-scroll" ref="editPreviewScrollEl">
-                  <MdPreview
-                    :id="editPreviewId"
-                    :modelValue="currentDoc.content"
-                    :theme="editorTheme"
-                    :previewTheme="previewTheme"
-                    :codeTheme="codeTheme"
-                    :mdHeadingId="mdHeadingId"
-                    class="md-preview"
-                  />
-                </div>
-              </div>
+              <MdEditor
+                ref="editorRef"
+                v-model="currentDoc.content"
+                :theme="editorTheme"
+                :previewTheme="previewTheme"
+                :codeTheme="codeTheme"
+                :toolbars="editorToolbars"
+                :mdHeadingId="mdHeadingId"
+                class="md-editor"
+                @change="onContentChange"
+                @save="saveDoc"
+                @uploadImg="handleUploadImg"
+              />
             </div>
           </div>
         </template>
@@ -383,11 +359,9 @@ const previewTheme = ref(localStorage.getItem('md-preview-theme') || 'github')
 const codeTheme = ref(localStorage.getItem('md-code-theme') || 'github')
 const showCatalog = ref(true)
 const previewId = 'doc-preview'
-const editPreviewId = 'doc-edit-preview'
 const formattingDoc = ref(false)
 const importingUrl = ref(false)
 const previewScrollEl = ref(null)
-const editPreviewScrollEl = ref(null)
 const editorRef = ref(null)
 
 const mdHeadingId = ({ text, level, index }) => {
@@ -1095,7 +1069,8 @@ const handleUploadImg = async (files, callback) => {
   formData.append('file', files[0])
   
   try {
-    const res = await fetch('http://localhost:3000/api/upload/image', {
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+    const res = await fetch(`${apiBase}/uploads/image`, {
       method: 'POST',
       body: formData
     })
@@ -1103,7 +1078,10 @@ const handleUploadImg = async (files, callback) => {
     const data = await res.json()
     
     if (data.data?.url) {
-      callback([`http://localhost:3000${data.data.url}`])
+      const uploadUrl = data.data.url.startsWith('http')
+        ? data.data.url
+        : `${apiBase.replace(/\/api$/, '')}${data.data.url}`
+      callback([uploadUrl])
     } else {
       message.error('上传失败')
     }
@@ -1546,64 +1524,7 @@ onMounted(() => {
 .editor-main {
   flex: 1;
   display: flex;
-  gap: 1px;
-  background: var(--border-color);
   overflow: hidden;
-}
-
-.editor-pane,
-.preview-pane {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: var(--card-bg);
-  overflow: hidden;
-}
-
-.pane-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 16px;
-  background: var(--bg-color);
-  border-bottom: 1px solid var(--border-color);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-color-3);
-}
-
-.word-count {
-  font-weight: 400;
-  color: var(--text-color-4);
-}
-
-.pane-content {
-  flex: 1;
-  overflow: hidden;
-}
-
-.preview-scroll {
-  overflow-y: auto;
-  padding: 16px;
-}
-
-.editor-textarea {
-  width: 100%;
-  height: 100%;
-  border: none;
-  outline: none;
-  resize: none;
-  padding: 16px;
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 14px;
-  line-height: 1.6;
-  background: var(--card-bg);
-  color: var(--text-color);
-  tab-size: 2;
-}
-
-.editor-textarea::placeholder {
-  color: var(--text-color-4);
 }
 
 .md-editor {

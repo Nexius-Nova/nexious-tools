@@ -105,10 +105,23 @@ export async function initSqlite() {
       role VARCHAR(20) NOT NULL,
       content TEXT NOT NULL,
       refs TEXT,
+      images TEXT,
       title VARCHAR(255),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  try {
+    const columns = db.exec("PRAGMA table_info(ai_messages)");
+    if (columns.length > 0) {
+      const hasImagesColumn = columns[0].values.some(col => col[1] === 'images');
+      if (!hasImagesColumn) {
+        db.run(`ALTER TABLE ai_messages ADD COLUMN images TEXT`);
+      }
+    }
+  } catch (err) {
+    console.error('添加images列失败:', err.message);
+  }
 
   db.run(`
     CREATE TABLE IF NOT EXISTS settings (

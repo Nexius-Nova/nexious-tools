@@ -17,13 +17,11 @@ if (metaUrl && metaUrl !== '') {
   __dirname = process.cwd()
 }
 
-if (process.env.RESOURCES_PATH) {
-  __dirname = process.env.RESOURCES_PATH
-}
-
 const router = express.Router()
 
-const uploadsDir = path.join(__dirname, 'uploads')
+const uploadsDir = process.env.RESOURCES_PATH 
+  ? path.join(process.env.RESOURCES_PATH, 'uploads')
+  : path.resolve(__dirname, '..', 'uploads')
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true })

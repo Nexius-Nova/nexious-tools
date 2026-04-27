@@ -12,7 +12,7 @@
     "build:server": "node build-server.js",
     "server": "node server/index.js",
     "start": "electron-forge start",
-    "prepackage": "npm run build && npm run build:server",
+    "prepackage": "node node_modules/vite/bin/vite.js build && node build-server.js && node scripts/prepare-electron-zip.cjs",
     "package": "electron-forge package",
     "make": "electron-forge make"
   },
@@ -52,6 +52,7 @@
     "forge": {
       "packagerConfig": {
         "asar": true,
+        "electronZipDir": "./.electron-zips",
         "extraResource": [
           "./dist-server",
           "./data",

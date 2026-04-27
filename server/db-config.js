@@ -27,6 +27,14 @@ export function updateDbConfig(type, config) {
 }
 
 export function getDataPath() {
+  if (process.env.APP_DATA_DIR) {
+    const dataPath = path.join(process.env.APP_DATA_DIR, 'data')
+    if (!fs.existsSync(dataPath)) {
+      fs.mkdirSync(dataPath, { recursive: true })
+    }
+    return dataPath
+  }
+
   if (process.env.NODE_ENV === 'production' || process.pkg || process.env.RESOURCES_PATH) {
     const resourcesPath = process.env.RESOURCES_PATH || process.resourcesPath || path.dirname(process.execPath)
     const dataPath = path.join(resourcesPath, 'data')

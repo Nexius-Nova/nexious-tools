@@ -94,10 +94,33 @@ const fetchWithTimeout = async (url, options, timeout = 120000) => {
   }
 }
 
-router.post('/chat', async (req, res) => {
-  const { message: userMessage, history = [], stream = true, systemPrompt: customSystemPrompt, continueFrom = null, temperature = 0.7, max_tokens = 4096 } = req.body
+const buildMessageContent = (text, images = []) => {
+  if (!images || images.length === 0) {
+    return text
+  }
   
-  if (!userMessage && !continueFrom) {
+  const content = []
+  
+  if (text) {
+    content.push({ type: 'text', text })
+  }
+  
+  images.forEach(img => {
+    content.push({
+      type: 'image_url',
+      image_url: {
+        url: img.url || img
+      }
+    })
+  })
+  
+  return content
+}
+
+router.post('/chat', async (req, res) => {
+  const { message: userMessage, history = [], stream = true, systemPrompt: customSystemPrompt, continueFrom = null, temperature = 0.7, max_tokens = 4096, images = [] } = req.body
+  
+  if (!userMessage && !continueFrom && images.length === 0) {
     return res.status(400).json({ error: '消息不能为空' })
   }
   
@@ -136,10 +159,16 @@ ${continueFrom}
 请继续输出剩余内容：` }
       ]
     } else {
+      const userContent = buildMessageContent(userMessage, images)
       messages = [
         { role: 'system', content: systemPrompt },
-        ...history.map(m => ({ role: m.role, content: m.content })),
-        { role: 'user', content: userMessage }
+        ...history.map(m => {
+          if (m.images && m.images.length > 0) {
+            return { role: m.role, content: buildMessageContent(m.content, m.images) }
+          }
+          return { role: m.role, content: m.content }
+        }),
+        { role: 'user', content: userContent }
       ]
     }
     
