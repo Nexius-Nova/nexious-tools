@@ -330,10 +330,11 @@ import { aiModelsApi } from "../api/ai-models";
 const message = useMessage();
 const dialog = useDialog();
 const { currentTheme, setTheme } = useTheme();
+const DEFAULT_GLOBAL_SHORTCUT = "CommandOrControl+Shift+Space";
 
 const settings = reactive({
   auto_launch: false,
-  global_shortcut: "CommandOrControl+Shift+Space"
+  global_shortcut: DEFAULT_GLOBAL_SHORTCUT
 });
 
 const exporting = ref(false);
@@ -386,6 +387,8 @@ const providerPresets = {
     models: [
       { label: "GPT-4o", value: "gpt-4o" },
       { label: "GPT-4o Mini", value: "gpt-4o-mini" },
+      { label: "GPT-4.1", value: "gpt-4.1" },
+      { label: "GPT-4.1 Mini", value: "gpt-4.1-mini" },
       { label: "GPT-4 Turbo", value: "gpt-4-turbo" },
       { label: "GPT-4", value: "gpt-4" },
       { label: "GPT-3.5 Turbo", value: "gpt-3.5-turbo" },
@@ -417,11 +420,14 @@ const providerPresets = {
   moonshot: {
     base_url: "https://api.moonshot.cn/v1",
     models: [
+      { label: "Kimi K2.5", value: "kimi-k2.5" },
+      { label: "Moonshot Vision Preview 32K", value: "moonshot-v1-32k-vision-preview" },
+      { label: "Moonshot Vision Preview 128K", value: "moonshot-v1-128k-vision-preview" },
       { label: "Moonshot V1 8K", value: "moonshot-v1-8k" },
       { label: "Moonshot V1 32K", value: "moonshot-v1-32k" },
       { label: "Moonshot V1 128K", value: "moonshot-v1-128k" }
     ],
-    default_model: "moonshot-v1-8k"
+    default_model: "kimi-k2.5"
   },
   anthropic: {
     base_url: "https://api.anthropic.com",
@@ -469,6 +475,9 @@ const providerPresets = {
   siliconflow: {
     base_url: "https://api.siliconflow.cn/v1",
     models: [
+      { label: "Kimi K2.5", value: "Pro/moonshotai/Kimi-K2.5" },
+      { label: "Qwen2.5 VL 72B", value: "Qwen/Qwen2.5-VL-72B-Instruct" },
+      { label: "Qwen2.5 VL 32B", value: "Qwen/Qwen2.5-VL-32B-Instruct" },
       { label: "Qwen2.5-72B-Instruct", value: "Qwen/Qwen2.5-72B-Instruct" },
       { label: "Qwen2.5-32B-Instruct", value: "Qwen/Qwen2.5-32B-Instruct" },
       { label: "Qwen2.5-7B-Instruct", value: "Qwen/Qwen2.5-7B-Instruct" },
@@ -477,9 +486,20 @@ const providerPresets = {
         label: "Llama-3.3-70B-Instruct",
         value: "meta-llama/Llama-3.3-70B-Instruct"
       },
-      { label: "GLM-4-9B-Chat", value: "THUDM/glm-4-9b-chat" }
+      { label: "GLM-4-9B-Chat", value: "THUDM/glm-4-9b-chat" },
+      { label: "GLM-4V-9B", value: "THUDM/glm-4v-9b" }
     ],
-    default_model: "Qwen/Qwen2.5-7B-Instruct"
+    default_model: "Pro/moonshotai/Kimi-K2.5"
+  },
+  openrouter: {
+    base_url: "https://openrouter.ai/api/v1",
+    models: [
+      { label: "GPT-4o Mini", value: "openai/gpt-4o-mini" },
+      { label: "Claude 3.5 Sonnet", value: "anthropic/claude-3.5-sonnet" },
+      { label: "Gemini 2.0 Flash", value: "google/gemini-2.0-flash-001" },
+      { label: "Qwen2.5 VL 72B", value: "qwen/qwen2.5-vl-72b-instruct" }
+    ],
+    default_model: "openai/gpt-4o-mini"
   },
   custom: {
     base_url: "",
@@ -637,8 +657,25 @@ const handleShortcutKeydown = (e) => {
   }
 };
 
-const resetShortcut = () => {
-  settings.global_shortcut = "CommandOrControl+Shift+Space";
+const syncNativeSettings = async () => {
+  if (window.electronAPI?.getGlobalShortcut) {
+    const activeShortcut = await window.electronAPI.getGlobalShortcut();
+    if (activeShortcut) {
+      settings.global_shortcut = activeShortcut;
+    }
+  }
+
+  if (window.electronAPI?.getAutoLaunch) {
+    const autoLaunch = await window.electronAPI.getAutoLaunch();
+    if (typeof autoLaunch === "boolean") {
+      settings.auto_launch = autoLaunch;
+    }
+  }
+};
+
+const resetShortcut = async () => {
+  settings.global_shortcut = DEFAULT_GLOBAL_SHORTCUT;
+  await saveShortcut();
 };
 
 const saveShortcut = async () => {
@@ -651,6 +688,7 @@ const saveShortcut = async () => {
         await settingsApi.set("global_shortcut", settings.global_shortcut);
         message.success("快捷键已保存");
       } else {
+        await syncNativeSettings();
         message.error("快捷键注册失败，请尝试其他组合");
       }
     } else {
@@ -673,9 +711,33 @@ const loadSettings = async () => {
         }
       });
     }
+
+    await syncNativeSettings();
   } catch (error) {
     console.error("加载设置失败:", error);
     message.error("加载设置失败");
+  }
+};
+
+const applyImportedRuntimeSettings = async (importedSettings = {}) => {
+  if (
+    Object.prototype.hasOwnProperty.call(importedSettings, "global_shortcut") &&
+    window.electronAPI?.setGlobalShortcut
+  ) {
+    const shortcutRegistered = await window.electronAPI.setGlobalShortcut(
+      importedSettings.global_shortcut
+    );
+
+    if (!shortcutRegistered) {
+      message.warning("导入的快捷键未能注册，已保留当前生效快捷键");
+    }
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(importedSettings, "auto_launch") &&
+    window.electronAPI?.setAutoLaunch
+  ) {
+    await window.electronAPI.setAutoLaunch(Boolean(importedSettings.auto_launch));
   }
 };
 
@@ -1048,6 +1110,8 @@ const doImport = async (data, mode) => {
       for (const [key, value] of Object.entries(data.settings)) {
         await settingsApi.set(key, value);
       }
+
+      await applyImportedRuntimeSettings(data.settings);
     }
 
     message.success(mode === "overwrite" ? "数据覆盖导入成功" : "数据增量导入成功");

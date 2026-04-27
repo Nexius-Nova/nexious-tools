@@ -14,6 +14,7 @@ import documentsRouter from './routes/documents.js'
 import docFoldersRouter from './routes/doc-folders.js'
 import uploadsRouter from './routes/uploads.js'
 import promptTemplatesRouter from './routes/prompt-templates.js'
+import { getUploadsPath, getRuntimeBasePath } from './utils/runtime-paths.js'
 
 let __dirname
 const metaUrl = import.meta.url
@@ -28,9 +29,7 @@ if (metaUrl && metaUrl !== '') {
   __dirname = process.cwd()
 }
 
-if (process.env.RESOURCES_PATH) {
-  __dirname = process.env.RESOURCES_PATH
-}
+__dirname = getRuntimeBasePath(__dirname)
 
 const app = express()
 const PORT = 3000
@@ -39,7 +38,7 @@ app.use(cors())
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
-app.use('/api/uploads', express.static(path.join(__dirname, 'uploads')))
+app.use('/api/uploads', express.static(getUploadsPath(__dirname)))
 
 app.use('/api/websites', websitesRouter)
 app.use('/api/passwords', passwordsRouter)
@@ -50,7 +49,7 @@ app.use('/api/ai-models', aiModelsRouter)
 app.use('/api/ai-messages', aiMessagesRouter)
 app.use('/api/documents', documentsRouter)
 app.use('/api/doc-folders', docFoldersRouter)
-app.use('/api/upload', uploadsRouter)
+app.use('/api/uploads', uploadsRouter)
 app.use('/api/prompt-templates', promptTemplatesRouter)
 
 app.use((err, req, res, next) => {

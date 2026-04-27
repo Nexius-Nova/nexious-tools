@@ -335,6 +335,27 @@ const filteredInstalledApps = computed(() => {
   return result
 })
 
+const loadInstalledAppIcons = async (apps, limit = 24) => {
+  const appPaths = (apps || [])
+    .map(app => app.path)
+    .filter(Boolean)
+    .slice(0, limit)
+
+  if (appPaths.length === 0 || !window.electronAPI?.getAppIcons) {
+    return
+  }
+
+  try {
+    const iconMap = await window.electronAPI.getAppIcons(appPaths)
+    installedApps.value = installedApps.value.map(app => ({
+      ...app,
+      icon: app.icon || iconMap?.[app.path] || ''
+    }))
+  } catch (error) {
+    console.error('加载应用图标失败:', error)
+  }
+}
+
 const typeLabel = computed(() => {
   const labels = {
     website: '网站',
@@ -493,6 +514,7 @@ const loadInstalledApps = async () => {
       })
       if (installedApps.value.length > 0) {
         showAppSelector.value = true
+        loadInstalledAppIcons(installedApps.value)
       } else {
         message.info('所有应用已导入过')
       }
@@ -506,6 +528,12 @@ const loadInstalledApps = async () => {
     loadingApps.value = false
   }
 }
+
+watch([appSourceFilter, appSearchKeyword], () => {
+  if (showAppSelector.value) {
+    loadInstalledAppIcons(filteredInstalledApps.value)
+  }
+})
 
 const selectInstalledApp = (app) => {
   form.name = app.name

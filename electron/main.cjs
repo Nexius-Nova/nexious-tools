@@ -5,6 +5,11 @@ const fs = require("fs")
 const os = require("os")
 const axios = require("axios")
 
+const DEFAULT_GLOBAL_SHORTCUT = "CommandOrControl+Shift+Space"
+const SETTINGS_API_URL = "http://localhost:3000/api/settings/global_shortcut"
+const SETTINGS_FETCH_RETRY_COUNT = 10
+const SETTINGS_FETCH_RETRY_DELAY = 500
+
 let iconExtractor
 try {
   let iconExtractorPath
@@ -21,7 +26,40 @@ try {
 
 let mainWindow
 let serverProcess
-let currentShortcut = "CommandOrControl+Shift+Space"
+let currentShortcut = DEFAULT_GLOBAL_SHORTCUT
+const appScanCache = {
+  expiresAt: 0,
+  apps: []
+}
+const iconCache = new Map()
+const APP_SCAN_CACHE_TTL = 5 * 60 * 1000
+const ICON_BATCH_SIZE = 12
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function toggleMainWindowVisibility() {
+  if (!mainWindow) {
+    return
+  }
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore()
+    mainWindow.focus()
+    mainWindow.webContents.send("window-restored")
+    return
+  }
+
+  if (mainWindow.isVisible()) {
+    mainWindow.minimize()
+    return
+  }
+
+  mainWindow.show()
+  mainWindow.focus()
+  mainWindow.webContents.send("window-restored")
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -62,37 +100,77 @@ function createWindow() {
 }
 
 function registerGlobalShortcut(accelerator) {
-  globalShortcut.unregisterAll()
-  
   if (!accelerator) {
     return false
   }
-  
+
+  const nextShortcut = accelerator.trim()
+  const previousShortcut = currentShortcut
+  const hadPreviousShortcut =
+    Boolean(previousShortcut) && globalShortcut.isRegistered(previousShortcut)
+
   try {
-    const result = globalShortcut.register(accelerator, () => {
-      if (mainWindow) {
-        if (mainWindow.isMinimized()) {
-          mainWindow.restore()
-          mainWindow.focus()
-          mainWindow.webContents.send('window-restored')
-        } else if (mainWindow.isVisible()) {
-          mainWindow.minimize()
-        } else {
-          mainWindow.show()
-          mainWindow.focus()
-          mainWindow.webContents.send('window-restored')
-        }
-      }
-    })
-    
-    if (result) {
-      currentShortcut = accelerator
+    if (hadPreviousShortcut && previousShortcut === nextShortcut) {
+      currentShortcut = nextShortcut
       return true
+    }
+
+    if (hadPreviousShortcut) {
+      globalShortcut.unregister(previousShortcut)
+    }
+
+    const result = globalShortcut.register(nextShortcut, toggleMainWindowVisibility)
+
+    if (result) {
+      currentShortcut = nextShortcut
+      return true
+    }
+
+    if (hadPreviousShortcut) {
+      globalShortcut.register(previousShortcut, toggleMainWindowVisibility)
     }
     return false
   } catch (e) {
+    if (
+      hadPreviousShortcut &&
+      previousShortcut !== nextShortcut &&
+      !globalShortcut.isRegistered(previousShortcut)
+    ) {
+      try {
+        globalShortcut.register(previousShortcut, toggleMainWindowVisibility)
+      } catch (restoreError) {
+        console.error("恢复旧快捷键失败:", restoreError)
+      }
+    }
     console.error("注册快捷键失败:", e)
     return false
+  }
+}
+
+async function loadSavedGlobalShortcut() {
+  for (let attempt = 0; attempt < SETTINGS_FETCH_RETRY_COUNT; attempt += 1) {
+    try {
+      const response = await axios.get(SETTINGS_API_URL, {
+        timeout: 2000
+      })
+      const savedShortcut = response?.data?.data
+
+      if (!savedShortcut || savedShortcut === currentShortcut) {
+        return
+      }
+
+      const result = registerGlobalShortcut(savedShortcut)
+      if (!result) {
+        console.error("已保存的快捷键注册失败，保留当前快捷键:", savedShortcut)
+      }
+      return
+    } catch (error) {
+      if (attempt === SETTINGS_FETCH_RETRY_COUNT - 1) {
+        console.error("加载已保存快捷键失败:", error.message)
+        return
+      }
+      await delay(SETTINGS_FETCH_RETRY_DELAY)
+    }
   }
 }
 
@@ -128,6 +206,7 @@ function startServer() {
 app.whenReady().then(() => {
   startServer()
   createWindow()
+  loadSavedGlobalShortcut()
   
   app.focus()
 })
@@ -239,11 +318,30 @@ ipcMain.handle("get-exe-icon", async (event, iconPath) => {
       return null
     }
     
-    const iconBase64 = await extractIcon(iconPath)
+    const iconBase64 = await getCachedIcon(iconPath)
     return iconBase64
   } catch (error) {
     console.error("提取图标失败:", error)
     return null
+  }
+})
+
+ipcMain.handle("get-app-icons", async (event, appPaths = []) => {
+  try {
+    if (process.platform !== "win32" || !Array.isArray(appPaths) || appPaths.length === 0) {
+      return {}
+    }
+
+    const uniquePaths = [...new Set(appPaths.filter(Boolean))]
+    const icons = await mapWithConcurrency(uniquePaths, ICON_BATCH_SIZE, async (appPath) => {
+      const icon = await getCachedIcon(appPath)
+      return [appPath, icon || ""]
+    })
+
+    return Object.fromEntries(icons)
+  } catch (error) {
+    console.error("鎵归噺鎻愬彇鍥炬爣澶辫触:", error)
+    return {}
   }
 })
 
@@ -335,6 +433,46 @@ async function extractIcon(iconPath) {
       resolve(null)
     })
   })
+}
+
+async function getCachedIcon(iconPath) {
+  if (!iconPath || typeof iconPath !== "string") {
+    return null
+  }
+
+  let cleanPath = iconPath.trim()
+  if (cleanPath.includes(",")) {
+    cleanPath = cleanPath.split(",")[0].trim()
+  }
+  cleanPath = cleanPath.replace(/^["']|["']$/g, "")
+
+  if (!cleanPath) {
+    return null
+  }
+
+  if (iconCache.has(cleanPath)) {
+    return iconCache.get(cleanPath)
+  }
+
+  const iconBase64 = await extractIconWithExtractor(cleanPath) || await extractIcon(cleanPath) || null
+  iconCache.set(cleanPath, iconBase64)
+  return iconBase64
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const results = new Array(items.length)
+  let currentIndex = 0
+
+  async function worker() {
+    while (currentIndex < items.length) {
+      const index = currentIndex++
+      results[index] = await mapper(items[index], index)
+    }
+  }
+
+  const workerCount = Math.min(concurrency, items.length)
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+  return results
 }
 
 async function extractIconsBatch(apps) {
@@ -434,6 +572,11 @@ function extractIconWithExtractor(iconPath) {
 }
 
 ipcMain.handle("auto-import-apps", async () => {
+  const now = Date.now()
+  if (appScanCache.expiresAt > now && appScanCache.apps.length > 0) {
+    return appScanCache.apps
+  }
+
   const apps = []
   const seenPaths = new Set()
   const seenNames = new Set()
@@ -472,7 +615,9 @@ ipcMain.handle("auto-import-apps", async () => {
       }
     }
   }
-  
+
+  appScanCache.apps = apps
+  appScanCache.expiresAt = now + APP_SCAN_CACHE_TTL
   return apps
 })
 
@@ -529,15 +674,6 @@ async function parseLnkDirectory(dirPath) {
 
   const lnkResults = (await Promise.all(lnkPromises)).filter(Boolean)
   shortcuts.push(...lnkResults)
-
-  const iconPromises = shortcuts.slice(0, 50).map(async (shortcut) => {
-    try {
-      shortcut.icon = await extractIconWithExtractor(shortcut.path) || ""
-    } catch (e) {
-      // ignore
-    }
-  })
-  await Promise.all(iconPromises)
 
   return shortcuts
 }
@@ -635,15 +771,6 @@ async function getRegistryApps() {
       }
     }
   }
-
-  const iconPromises = apps.slice(0, 100).map(async (app) => {
-    try {
-      app.icon = await extractIconWithExtractor(app.path) || ""
-    } catch (e) {
-      // ignore
-    }
-  })
-  await Promise.all(iconPromises)
 
   return apps
 }

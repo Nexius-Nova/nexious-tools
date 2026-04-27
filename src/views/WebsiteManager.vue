@@ -617,12 +617,21 @@ const dragOverIndex = ref(-1);
 const pageSize = ref(50);
 const loadingMore = ref(false);
 const cardContainerRef = ref(null);
+const tablePageSize = ref(20);
+const tableLoading = ref(false);
 
 const tablePagination = computed(() => ({
-  pageSize: 20,
+  pageSize: tablePageSize.value,
   showSizePicker: true,
   pageSizes: [20, 50, 100],
-  showQuickJumper: true
+  showQuickJumper: true,
+  onUpdatePageSize: (size) => {
+    tableLoading.value = true;
+    tablePageSize.value = size;
+    setTimeout(() => {
+      tableLoading.value = false;
+    }, 150);
+  }
 }));
 
 const displayedItems = computed(() => {
@@ -650,6 +659,12 @@ watch([activeTab, searchQuery], () => {
   pageSize.value = 50;
 });
 
+watch([appSourceFilter, appSearchQuery], () => {
+  if (showPreviewModal.value) {
+    loadAppIcons(filteredScannedApps.value);
+  }
+});
+
 const filteredScannedApps = computed(() => {
   let result = scannedApps.value;
   if (appSourceFilter.value) {
@@ -665,6 +680,27 @@ const filteredScannedApps = computed(() => {
   }
   return result;
 });
+
+const loadAppIcons = async (apps, limit = 36) => {
+  const appPaths = (apps || [])
+    .map((app) => app.path)
+    .filter(Boolean)
+    .slice(0, limit);
+
+  if (appPaths.length === 0 || !window.electronAPI?.getAppIcons) {
+    return;
+  }
+
+  try {
+    const iconMap = await window.electronAPI.getAppIcons(appPaths);
+    scannedApps.value = scannedApps.value.map((app) => ({
+      ...app,
+      icon: app.icon || iconMap?.[app.path] || ""
+    }));
+  } catch (error) {
+    console.error("加载应用图标失败:", error);
+  }
+};
 
 const getSourceLabel = (source) => {
   const map = { desktop: "桌面", startmenu: "开始菜单", registry: "注册表" };
@@ -1222,6 +1258,7 @@ const scanApps = async () => {
         if (registryCount) sourceInfo.push(`注册表 ${registryCount}`);
         message.info(`扫描完成：${sourceInfo.join("、")}`);
         showPreviewModal.value = true;
+        loadAppIcons(scannedApps.value);
       }
     } else {
       message.info("未找到新的应用");
@@ -2012,5 +2049,22 @@ onMounted(() => {
     height: 20px;
     font-size: 10px;
   }
+}
+
+.table-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

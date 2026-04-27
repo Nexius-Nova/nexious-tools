@@ -164,7 +164,8 @@ router.post('/test', async (req, res) => {
       aliyun: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
       baidu: 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat',
       tencent: 'https://api.hunyuan.cloud.tencent.com/v1',
-      siliconflow: 'https://api.siliconflow.cn/v1'
+      siliconflow: 'https://api.siliconflow.cn/v1',
+      openrouter: 'https://openrouter.ai/api/v1'
     }
     
     let testUrl = baseUrl || providerUrls[provider]

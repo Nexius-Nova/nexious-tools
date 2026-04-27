@@ -178,6 +178,18 @@
                   {{ ref.type }}: {{ ref.name }}
                 </n-tag>
               </div>
+              <div
+                v-if="msg.images && msg.images.length > 0"
+                class="message-images"
+              >
+                <img
+                  v-for="(img, imgIndex) in msg.images"
+                  :key="imgIndex"
+                  :src="getImagePreviewSrc(img)"
+                  class="message-image"
+                  @click="previewImage(getImagePreviewSrc(img))"
+                />
+              </div>
               <MessageContent :content="msg.content" />
               <div
                 v-if="
@@ -396,7 +408,38 @@
             {{ ref.type }}: {{ ref.name }}
           </n-tag>
         </div>
+        <div v-if="selectedImages.length > 0" class="selected-images">
+          <div
+            v-for="(img, index) in selectedImages"
+            :key="index"
+            class="image-preview-item"
+          >
+            <img :src="getImagePreviewSrc(img)" :alt="img.name" />
+            <n-button
+              circle
+              size="tiny"
+              class="remove-image-btn"
+              @click="removeImage(index)"
+            >
+              <template #icon>
+                <n-icon><CloseOutline /></n-icon>
+              </template>
+            </n-button>
+          </div>
+        </div>
         <div class="input-row">
+          <n-button
+            circle
+            size="large"
+            quaternary
+            :loading="uploadingImage"
+            @click="triggerImageUpload"
+            :disabled="loading || selectedImages.length >= 5"
+          >
+            <template #icon>
+              <n-icon><ImageOutline /></n-icon>
+            </template>
+          </n-button>
           <n-input
             v-model:value="inputMessage"
             type="textarea"
@@ -423,7 +466,7 @@
             circle
             size="large"
             @click="sendMessage"
-            :disabled="!inputMessage.trim()"
+            :disabled="!inputMessage.trim() && selectedImages.length === 0"
           >
             <template #icon>
               <n-icon><SendOutline /></n-icon>
@@ -685,14 +728,26 @@
                 />
               </n-form-item>
               <n-button type="primary" @click="createTemplate" :disabled="!newTemplate.name || !newTemplate.content">
-                添加模板
-              </n-button>
-            </n-form>
-          </n-space>
-        </div>
-      </n-modal>
-    </div>
+              添加模板
+            </n-button>
+          </n-form>
+        </n-space>
+      </div>
+    </n-modal>
+
+    <n-modal
+      v-model:show="showImagePreview"
+      preset="card"
+      style="width: auto; max-width: 90vw; max-height: 90vh"
+      :bordered="false"
+    >
+      <img
+        :src="previewImageUrl"
+        style="max-width: 100%; max-height: 80vh; object-fit: contain"
+      />
+    </n-modal>
   </div>
+</div>
 </template>
 
 <script setup>
@@ -750,7 +805,9 @@ import {
   StopOutline,
   EllipsisVertical,
   SettingsOutline,
-  DocumentTextOutline
+  DocumentTextOutline,
+  ImageOutline,
+  CloseOutline
 } from "@vicons/ionicons5";
 import { aiMessageApi } from "../api/ai-message";
 import { websiteApi } from "../api/website";
@@ -785,6 +842,22 @@ const activeTab = ref("websites");
 const selectedReferences = ref([]);
 const conversations = ref([]);
 const currentConversationId = ref(null);
+const selectedImages = ref([]);
+const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+const apiOrigin = apiBase.replace(/\/api$/, "");
+
+const resolveUploadUrl = (url) => {
+  if (!url || typeof url !== "string") return "";
+  if (/^https?:\/\//i.test(url) || url.startsWith("data:")) return url;
+  if (url.startsWith("/")) return `${apiOrigin}${url}`;
+  return `${apiOrigin}/${url}`;
+};
+const getImagePreviewSrc = (image) => {
+  if (!image) return "";
+  if (typeof image === "string") return resolveUploadUrl(image);
+  return resolveUploadUrl(image.url || image.base64 || "");
+};
+const uploadingImage = ref(false);
 
 const websites = ref([]);
 const passwords = ref([]);
@@ -1011,6 +1084,7 @@ const loadConversation = async (conversationId) => {
       role: m.role,
       content: m.content,
       references: m.references || [],
+      images: m.images || [],
       aiReferences: m.role === "assistant" ? m.references || [] : []
     }));
     currentConversationId.value = conversationId;
@@ -1177,6 +1251,79 @@ const removeReference = (ref) => {
   );
 };
 
+const triggerImageUpload = () => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.multiple = true;
+  input.onchange = handleImageSelect;
+  input.click();
+};
+
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error("读取图片失败"));
+    reader.readAsDataURL(file);
+  });
+
+const handleImageSelect = async (e) => {
+  const files = Array.from(e.target.files || []);
+  if (files.length === 0) return;
+
+  uploadingImage.value = true;
+  try {
+    for (const file of files) {
+      if (selectedImages.value.length >= 5) {
+        message.warning('最多只能上传5张图片');
+        break;
+      }
+      
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const [base64, response] = await Promise.all([
+        readFileAsDataUrl(file),
+        fetch(`${apiBase}/uploads/image`, {
+          method: 'POST',
+          body: formData
+        })
+      ]);
+      
+      if (!response.ok) {
+        throw new Error('上传失败');
+      }
+      
+      const result = await response.json();
+      if (result.data?.url) {
+        selectedImages.value.push({
+          url: result.data.url,
+          name: result.data.name || file.name,
+          base64
+        });
+      }
+    }
+  } catch (error) {
+    console.error('图片上传失败:', error);
+    message.error('图片上传失败');
+  } finally {
+    uploadingImage.value = false;
+  }
+};
+
+const removeImage = (index) => {
+  selectedImages.value.splice(index, 1);
+};
+
+const previewImageUrl = ref('');
+const showImagePreview = ref(false);
+
+const previewImage = (url) => {
+  previewImageUrl.value = getImagePreviewSrc(url);
+  showImagePreview.value = true;
+};
+
 const quoteMessage = (msg) => {
   const quotedContent = msg.content.substring(0, 200);
   inputMessage.value = `> ${quotedContent}${msg.content.length > 200 ? "..." : ""}\n\n`;
@@ -1217,7 +1364,7 @@ const buildReferenceContext = () => {
   return context;
 };
 
-const saveMessage = async (role, content, references) => {
+const saveMessage = async (role, content, references, images = []) => {
   try {
     if (!currentConversationId.value) {
       currentConversationId.value = crypto.randomUUID();
@@ -1226,7 +1373,8 @@ const saveMessage = async (role, content, references) => {
       conversation_id: currentConversationId.value,
       role,
       content,
-      references
+      references,
+      images
     });
     await loadConversations();
   } catch (error) {
@@ -1236,21 +1384,25 @@ const saveMessage = async (role, content, references) => {
 
 const sendMessage = async () => {
   const content = inputMessage.value.trim();
-  if (!content || loading.value) return;
+  const hasImages = selectedImages.value.length > 0;
+  if ((!content && !hasImages) || loading.value) return;
 
   const references = [...selectedReferences.value];
+  const images = [...selectedImages.value];
   const contextContent = content + buildReferenceContext();
 
   messages.value.push({
     role: "user",
     content,
-    references
+    references,
+    images
   });
 
-  await saveMessage("user", content, references);
+  await saveMessage("user", content, references, images);
 
   inputMessage.value = "";
   selectedReferences.value = [];
+  selectedImages.value = [];
   scrollToBottom();
 
   loading.value = true;
@@ -1258,7 +1410,6 @@ const sendMessage = async () => {
   abortController.value = new AbortController();
 
   try {
-    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
     const systemPrompt = getAgentSystemPrompt() || currentTemplate.value?.content || "";
 
     let aiContent = "";
@@ -1282,11 +1433,13 @@ const sendMessage = async () => {
                   (m.references?.length
                     ? buildReferenceContextFromRefs(m.references)
                     : "")
-                : m.content
+                : m.content,
+            images: m.images || []
           })),
           stream: true,
           systemPrompt: systemPrompt || undefined,
-          continueFrom: continueFrom
+          continueFrom: continueFrom,
+          images
         }),
         signal: abortController.value.signal
       });
@@ -1371,8 +1524,9 @@ const sendMessage = async () => {
       return;
     }
     console.error("AI 对话失败:", error);
-    message.error(error.message || "AI对话失败，请检查设置");
-    const errorContent = "抱歉，发生了错误。请检查AI设置是否正确配置。";
+    message.error(error.message || "AI 对话失败，请检查设置");
+    const errorContent =
+      error.message || "抱歉，发生了错误。请检查 AI 设置是否正确配置。";
     messages.value.push({
       role: "assistant",
       content: errorContent
@@ -2212,5 +2366,59 @@ onMounted(() => {
   font-size: 12px;
   color: var(--text-color-3);
   margin-top: 4px;
+}
+
+.selected-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-color);
+  border-radius: 10px;
+}
+
+.image-preview-item {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.image-preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.remove-image-btn {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: var(--error-color) !important;
+  color: #fff !important;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+}
+
+.message-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.message-image {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.message-image:hover {
+  transform: scale(1.02);
 }
 </style>
