@@ -3,7 +3,6 @@ const path = require("path")
 const { spawn, exec } = require("child_process")
 const fs = require("fs")
 const os = require("os")
-const axios = require("axios")
 
 const DEFAULT_GLOBAL_SHORTCUT = "CommandOrControl+Shift+Space"
 const SETTINGS_API_URL = "http://localhost:3000/api/settings/global_shortcut"
@@ -150,10 +149,19 @@ function registerGlobalShortcut(accelerator) {
 async function loadSavedGlobalShortcut() {
   for (let attempt = 0; attempt < SETTINGS_FETCH_RETRY_COUNT; attempt += 1) {
     try {
-      const response = await axios.get(SETTINGS_API_URL, {
-        timeout: 2000
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 2000)
+      const response = await fetch(SETTINGS_API_URL, {
+        signal: controller.signal
       })
-      const savedShortcut = response?.data?.data
+      clearTimeout(timeout)
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const payload = await response.json()
+      const savedShortcut = payload?.data
 
       if (!savedShortcut || savedShortcut === currentShortcut) {
         return
@@ -191,6 +199,7 @@ function startServer() {
       ...process.env,
       NODE_ENV: app.isPackaged ? "production" : "development",
       RESOURCES_PATH: app.isPackaged ? process.resourcesPath : path.join(__dirname, ".."),
+      APP_DATA_DIR: app.getPath("userData"),
       ELECTRON_RUN_AS_NODE: "1"
     }
   })
