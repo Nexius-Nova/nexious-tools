@@ -1,0 +1,52 @@
+{
+  "appId": "com.nexious.tools",
+  "productName": "Nexious Tools",
+  "directories": {
+    "app": ".packaging/app",
+    "output": "release"
+  },
+  "files": [
+    "**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "dist-server",
+      "to": "dist-server"
+    },
+    {
+      "from": "node_modules/icon-extractor",
+      "to": "icon-extractor"
+    }
+  ],
+  "asar": true,
+  "compression": "normal",
+  "npmRebuild": false,
+  "buildDependenciesFromSource": false,
+  "artifactName": "${productName}-${version}-${arch}.${ext}",
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "portable",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "executableName": "NexiousTools",
+    "sign": null
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Nexious Tools",
+    "deleteAppDataOnUninstall": false
+  }
+}
