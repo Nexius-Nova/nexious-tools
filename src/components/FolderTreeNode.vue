@@ -2,9 +2,9 @@
   <div class="folder-node">
     <div
       class="tree-item"
-      :class="{ active: isActive, 'drag-over': isDragOver }"
+      :class="{ active: isActive, 'drag-over': isDragOver, disabled: disabled }"
       :style="{ paddingLeft: `${level * 16 + 8}px` }"
-      @click="handleSelect"
+      @click="disabled ? null : handleSelect"
       @dragover.prevent="handleDragOver"
       @dragleave="handleDragLeave"
       @drop.prevent="handleDrop"
@@ -23,13 +23,13 @@
       <n-icon :size="16"><FolderOutline /></n-icon>
       <span class="folder-name">{{ folder.name }}</span>
       <div class="folder-actions" @click.stop>
-        <n-button text size="tiny" @click.stop="$emit('addSub', folder.id)">
+        <n-button text size="tiny" @click.stop="$emit('addSub', folder.id)" :disabled="disabled">
           <template #icon><n-icon :size="14"><AddCircleOutline /></n-icon></template>
         </n-button>
-        <n-button text size="tiny" @click.stop="$emit('edit', folder)">
+        <n-button text size="tiny" @click.stop="$emit('edit', folder)" :disabled="disabled">
           <template #icon><n-icon :size="14"><CreateOutline /></n-icon></template>
         </n-button>
-        <n-button text size="tiny" @click.stop="$emit('delete', folder)">
+        <n-button text size="tiny" @click.stop="$emit('delete', folder)" :disabled="disabled">
           <template #icon><n-icon :size="14"><TrashOutline /></n-icon></template>
         </n-button>
       </div>
@@ -42,6 +42,7 @@
         :level="level + 1"
         :current-folder-id="currentFolderId"
         :expanded-folders="expandedFolders"
+        :disabled="disabled"
         @select="(id) => $emit('select', id)"
         @edit="(f) => $emit('edit', f)"
         @delete="(f) => $emit('delete', f)"
@@ -65,7 +66,8 @@ const props = defineProps({
   folder: { type: Object, required: true },
   level: { type: Number, default: 0 },
   currentFolderId: { type: [Number, null], default: null },
-  expandedFolders: { type: Set, default: () => new Set() }
+  expandedFolders: { type: Set, default: () => new Set() },
+  disabled: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['select', 'edit', 'delete', 'toggleExpand', 'addSub', 'moveDoc'])
@@ -139,6 +141,15 @@ const handleDrop = (e) => {
 .tree-item.drag-over {
   background: var(--primary-light);
   border: 2px dashed var(--primary-color);
+}
+
+.tree-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tree-item.disabled:hover {
+  background: transparent;
 }
 
 .expand-trigger {

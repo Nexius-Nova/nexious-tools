@@ -366,13 +366,21 @@ const quickResults = computed(() => {
   const query = quickSearchQuery.value.trim();
 
   if (!query) {
+    const sortedWebsites = [...websites.value]
+      .sort((a, b) => {
+        if (a.sort_order !== b.sort_order) {
+          return (a.sort_order || 0) - (b.sort_order || 0);
+        }
+        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      });
+
     results.push(
-      ...websites.value.slice(0, 5).map((w) => ({
+      ...sortedWebsites.slice(0, 8).map((w) => ({
         ...w,
-        type: w.type === "app" ? "app" : "website",
-        typeLabel: w.type === "app" ? "应用" : "网站",
+        type: w.type === "app" ? "app" : (w.type === "bookmark" ? "bookmark" : "website"),
+        typeLabel: w.type === "app" ? "应用" : (w.type === "bookmark" ? "书签" : "网站"),
         name: w.name,
-        subtitle: w.type === "app" ? "应用程序" : (w.alias || truncateUrl(w.url))
+        subtitle: w.type === "app" ? "本地应用" : (w.type === "bookmark" ? truncateUrl(w.url) : (w.alias || truncateUrl(w.url)))
       }))
     );
     return results.slice(0, 8);

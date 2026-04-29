@@ -206,12 +206,20 @@ const filteredResults = computed(() => {
   const query = searchQuery.value.trim()
   
   if (!query) {
-    results.push(...websites.value.filter(w => w.type !== 'app').slice(0, 5).map(w => ({
+    const sortedWebsites = [...websites.value]
+      .sort((a, b) => {
+        if (a.sort_order !== b.sort_order) {
+          return (a.sort_order || 0) - (b.sort_order || 0)
+        }
+        return new Date(b.created_at || 0) - new Date(a.created_at || 0)
+      })
+    
+    results.push(...sortedWebsites.slice(0, 8).map(w => ({
       ...w,
-      type: w.type === 'bookmark' ? 'bookmark' : 'website',
-      typeLabel: w.type === 'bookmark' ? '书签' : '网站',
+      type: w.type === 'app' ? 'app' : (w.type === 'bookmark' ? 'bookmark' : 'website'),
+      typeLabel: w.type === 'app' ? '应用' : (w.type === 'bookmark' ? '书签' : '网站'),
       name: w.name,
-      subtitle: w.type === 'bookmark' ? truncateUrl(w.url) : (w.alias || truncateUrl(w.url))
+      subtitle: w.type === 'app' ? '本地应用' : (w.type === 'bookmark' ? truncateUrl(w.url) : (w.alias || truncateUrl(w.url)))
     })))
     return results.slice(0, 8)
   }

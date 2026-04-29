@@ -335,24 +335,26 @@ const filteredInstalledApps = computed(() => {
   return result
 })
 
-const loadInstalledAppIcons = async (apps, limit = 24) => {
-  const appPaths = (apps || [])
-    .map(app => app.path)
-    .filter(Boolean)
-    .slice(0, limit)
-
-  if (appPaths.length === 0 || !window.electronAPI?.getAppIcons) {
+const loadInstalledAppIcons = async (apps, batchSize = 30) => {
+  if (!apps || apps.length === 0 || !window.electronAPI?.getAppIcons) {
     return
   }
 
-  try {
-    const iconMap = await window.electronAPI.getAppIcons(appPaths)
-    installedApps.value = installedApps.value.map(app => ({
-      ...app,
-      icon: app.icon || iconMap?.[app.path] || ''
-    }))
-  } catch (error) {
-    console.error('加载应用图标失败:', error)
+  const allPaths = apps.map(app => app.path).filter(Boolean)
+  const totalBatches = Math.ceil(allPaths.length / batchSize)
+  
+  for (let i = 0; i < totalBatches; i++) {
+    const batchPaths = allPaths.slice(i * batchSize, (i + 1) * batchSize)
+    
+    try {
+      const iconMap = await window.electronAPI.getAppIcons(batchPaths)
+      installedApps.value = installedApps.value.map(app => ({
+        ...app,
+        icon: app.icon || iconMap?.[app.path] || ''
+      }))
+    } catch (error) {
+      console.error(`加载第 ${i + 1} 批图标失败:`, error)
+    }
   }
 }
 

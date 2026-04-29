@@ -345,54 +345,64 @@ router.post('/filter-apps', async (req, res) => {
     const { provider, api_key, base_url, model } = aiModel
     const config = getProviderConfig(provider, base_url, model)
 
-    const appNames = apps.map(a => a.name).join('\n')
+    const batchSize = 50
+    const allFilteredApps = []
     
-    const aiResponse = await axios.post(
-      config.url,
-      {
-        model: config.model,
-        messages: [
-          {
-            role: 'system',
-            content: `你是一个应用筛选助手。从给定的应用列表中筛选出真正的桌面应用程序。
-规则：
-1. 排除系统组件、驱动程序、更新补丁、安全补丁
-2. 排除开发工具的辅助程序（如 crash handler, helper, uninstaller）
-3. 保留真正的用户应用程序（如浏览器、编辑器、聊天软件、游戏等）
-4. 返回JSON数组格式，只包含应用名称
+    for (let i = 0; i < apps.length; i += batchSize) {
+      const batch = apps.slice(i, i + batchSize)
+      const appNames = batch.map(a => a.name).join('\n')
+      
+      const aiResponse = await axios.post(
+        config.url,
+        {
+          model: config.model,
+          messages: [
+            {
+              role: 'system',
+              content: `你是一个应用筛选助手。从给定的应用列表中筛选出真正的桌面应用程序。
 
-示例输入：["Google Chrome", "Microsoft Update", "Crash Handler", "Visual Studio Code"]
-示例输出：["Google Chrome", "Visual Studio Code"]`
-          },
-          {
-            role: 'user',
-            content: `请筛选以下应用列表，返回真正的桌面应用名称（JSON数组格式）：\n${appNames}`
-          }
-        ],
-        max_tokens: 2000
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${api_key}`,
-          'Content-Type': 'application/json'
+筛选规则：
+1. 保留：浏览器、编辑器、IDE、聊天软件、游戏、办公软件、设计工具、音视频播放器、下载工具、压缩工具
+2. 排除：系统组件、驱动程序、更新补丁、安全补丁、运行时库、开发工具包
+3. 排除：辅助程序（crash handler、helper、assistant、service、daemon）
+4. 排除：安装程序、卸载程序、修复工具、配置工具
+
+返回格式：JSON数组，只包含应用名称，不要其他内容。
+示例输出：["Google Chrome", "Visual Studio Code", "WeChat"]`
+            },
+            {
+              role: 'user',
+              content: `筛选以下应用，返回真正的桌面应用名称（JSON数组）：\n${appNames}`
+            }
+          ],
+          max_tokens: 1000,
+          temperature: 0.1
         },
-        timeout: 30000
-      }
-    )
+        {
+          headers: {
+            'Authorization': `Bearer ${api_key}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 15000
+        }
+      )
 
-    const content = aiResponse.data.choices[0]?.message?.content?.trim() || '[]'
-    let validNames = []
-    try {
-      const jsonMatch = content.match(/\[[\s\S]*\]/)
-      if (jsonMatch) {
-        validNames = JSON.parse(jsonMatch[0])
+      const content = aiResponse.data.choices[0]?.message?.content?.trim() || '[]'
+      let validNames = []
+      try {
+        const jsonMatch = content.match(/\[[\s\S]*\]/)
+        if (jsonMatch) {
+          validNames = JSON.parse(jsonMatch[0])
+        }
+      } catch (e) {
+        console.error('解析AI响应失败:', e)
       }
-    } catch (e) {
-      console.error('解析AI响应失败:', e)
+      
+      const filteredBatch = batch.filter(app => validNames.includes(app.name))
+      allFilteredApps.push(...filteredBatch)
     }
     
-    const filteredApps = apps.filter(app => validNames.includes(app.name))
-    res.json({ data: filteredApps })
+    res.json({ data: allFilteredApps })
   } catch (error) {
     console.error('筛选应用失败:', error.response?.data || error.message)
     res.json({ data: apps })

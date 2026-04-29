@@ -17,7 +17,7 @@
           style="width: 110px"
           :options="codeThemeOptions"
         />
-        <n-button @click="triggerFileUpload" :loading="uploading">
+        <n-button @click="triggerFileUpload" :loading="uploading" :disabled="isAiWorking">
           <template #icon><n-icon><CloudUploadOutline /></n-icon></template>
           导入MD文件
         </n-button>
@@ -29,11 +29,11 @@
           style="display: none"
           @change="handleFileUpload"
         />
-        <n-button @click="openFolderModal(currentFolderId)">
+        <n-button @click="openFolderModal(currentFolderId)" :disabled="isAiWorking">
           <template #icon><n-icon><FolderOutline /></n-icon></template>
           新建文件夹
         </n-button>
-        <n-button type="primary" @click="createNewDoc">
+        <n-button type="primary" @click="createNewDoc" :disabled="isAiWorking">
           <template #icon><n-icon><DocumentOutline /></n-icon></template>
           {{ currentFolderId ? '在当前文件夹新建' : '新建文档' }}
         </n-button>
@@ -53,8 +53,8 @@
           <div class="section-content folder-tree" v-show="folderExpanded">
             <div 
               class="tree-item root-item"
-              :class="{ active: currentFolderId === null, 'drag-over': isRootDragOver }"
-              @click="selectFolder(null)"
+              :class="{ active: currentFolderId === null, 'drag-over': isRootDragOver, disabled: isAiWorking }"
+              @click="isAiWorking ? null : selectFolder(null)"
               @dragover.prevent="handleRootDragOver"
               @dragleave="handleRootDragLeave"
               @drop.prevent="handleRootDrop"
@@ -62,7 +62,7 @@
               <n-icon size="16"><FolderOutline /></n-icon>
               <span class="folder-name">全部文档</span>
               <div class="folder-actions" @click.stop>
-                <n-button text size="tiny" @click.stop="openFolderModal(null)">
+                <n-button text size="tiny" @click.stop="openFolderModal(null)" :disabled="isAiWorking">
                   <template #icon><n-icon size="14"><AddCircleOutline /></n-icon></template>
                 </n-button>
               </div>
@@ -74,7 +74,8 @@
               :level="0"
               :current-folder-id="currentFolderId"
               :expanded-folders="expandedFolders"
-              @select="selectFolder"
+              :disabled="isAiWorking"
+              @select="isAiWorking ? null : selectFolder"
               @edit="editFolder"
               @delete="deleteFolder"
               @toggle-expand="toggleFolderExpand"
@@ -117,9 +118,9 @@
                 v-for="doc in filteredDocs"
                 :key="doc.id"
                 class="doc-item"
-                :class="{ active: currentDoc?.id === doc.id }"
+                :class="{ active: currentDoc?.id === doc.id, disabled: isAiWorking }"
                 draggable="true"
-                @click="selectDoc(doc)"
+                @click="isAiWorking ? null : selectDoc(doc)"
                 @dragstart="handleDragStart($event, doc)"
                 @dragend="handleDragEnd"
               >
@@ -143,10 +144,10 @@
             <div class="preview-title-row">
               <h1 class="preview-title">{{ currentDoc.title || '无标题' }}</h1>
               <n-space :size="8">
-                <n-button quaternary circle :type="showCatalog ? 'primary' : 'default'" @click="showCatalog = !showCatalog">
+                <n-button quaternary circle :type="showCatalog ? 'primary' : 'default'" @click="showCatalog = !showCatalog" :disabled="isAiWorking">
                   <template #icon><n-icon size="18"><ListOutline /></n-icon></template>
                 </n-button>
-                <n-button quaternary circle @click="toggleFavorite">
+                <n-button quaternary circle @click="toggleFavorite" :disabled="isAiWorking">
                   <template #icon>
                     <n-icon :color="currentDoc.is_favorite ? '#faad14' : undefined" size="18">
                       <Star v-if="currentDoc.is_favorite" />
@@ -154,10 +155,10 @@
                     </n-icon>
                   </template>
                 </n-button>
-                <n-button quaternary circle type="primary" @click="enterEditMode">
+                <n-button quaternary circle type="primary" @click="enterEditMode" :disabled="isAiWorking">
                   <template #icon><n-icon size="18"><CreateOutline /></n-icon></template>
                 </n-button>
-                <n-button quaternary circle type="error" @click="deleteDoc">
+                <n-button quaternary circle type="error" @click="deleteDoc" :disabled="isAiWorking">
                   <template #icon><n-icon size="18"><TrashOutline /></n-icon></template>
                 </n-button>
               </n-space>
@@ -215,17 +216,18 @@
                 placeholder="输入文档标题..."
                 size="large"
                 class="title-input"
+                :disabled="isAiWorking"
               />
               <n-space :size="8">
-                <n-button quaternary circle :type="showCatalog ? 'primary' : 'default'" @click="showCatalog = !showCatalog">
+                <n-button quaternary circle :type="showCatalog ? 'primary' : 'default'" @click="showCatalog = !showCatalog" :disabled="isAiWorking">
                   <template #icon><n-icon size="18"><ListOutline /></n-icon></template>
                 </n-button>
-                <n-button @click="formatDocument" :loading="formattingDoc" type="info">
+                <n-button @click="formatDocument" :loading="formattingDoc" type="info" :disabled="importingUrl">
                   <template #icon><n-icon><SparklesOutline /></n-icon></template>
                   AI整理
                 </n-button>
-                <n-button @click="cancelEdit">取消</n-button>
-                <n-button type="primary" @click="saveDoc" :loading="saving">
+                <n-button @click="cancelEdit" :disabled="isAiWorking">取消</n-button>
+                <n-button type="primary" @click="saveDoc" :loading="saving" :disabled="isAiWorking">
                   <template #icon><n-icon><SaveOutline /></n-icon></template>
                   保存
                 </n-button>
@@ -239,13 +241,14 @@
                   placeholder="原文链接（可选）"
                   size="small"
                   style="flex: 1"
+                  :disabled="isAiWorking"
                 />
                 <n-button 
                   type="primary" 
                   size="small" 
                   @click="importFromUrl" 
                   :loading="importingUrl"
-                  :disabled="!currentDoc.source_url"
+                  :disabled="!currentDoc.source_url || formattingDoc"
                 >
                   <template #icon><n-icon><CloudDownloadOutline /></n-icon></template>
                   AI导入
@@ -308,7 +311,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   NH2, NSpace, NButton, NIcon, NInput, NText, NEmpty, NModal, NForm, NFormItem,
@@ -363,37 +366,53 @@ const formattingDoc = ref(false)
 const importingUrl = ref(false)
 const previewScrollEl = ref(null)
 const editorRef = ref(null)
+const aiAbortController = ref(null)
+
+const isAiWorking = computed(() => formattingDoc.value || importingUrl.value)
 
 const mdHeadingId = ({ text, level, index }) => {
   return `heading-${index}-${level}-${text.replace(/\s+/g, '-').substring(0, 20)}`
 }
 
 const scrollToEditorBottom = (() => {
-  let scrollTimeout = null
+  let lastScrollTime = 0
+  const throttleMs = 50
+  
   return () => {
-    if (scrollTimeout) return
-    scrollTimeout = setTimeout(() => {
-      scrollTimeout = null
-      nextTick(() => {
+    const now = Date.now()
+    if (now - lastScrollTime < throttleMs) {
+      return
+    }
+    lastScrollTime = now
+    
+    nextTick(() => {
+      requestAnimationFrame(() => {
         const editorEl = document.querySelector('.md-editor')
-        if (editorEl) {
-          const textarea = editorEl.querySelector('textarea')
-          if (textarea) {
-            textarea.scrollTo({
-              top: textarea.scrollHeight,
-              behavior: 'smooth'
-            })
+        if (!editorEl) return
+        
+        const textarea = editorEl.querySelector('textarea')
+        if (textarea) {
+          const scrollHeight = textarea.scrollHeight
+          const clientHeight = textarea.clientHeight
+          const currentScroll = textarea.scrollTop
+          
+          if (scrollHeight - currentScroll > clientHeight * 0.5) {
+            textarea.scrollTop = scrollHeight
           }
-          const previewEl = editorEl.querySelector('.md-editor-preview-wrapper')
-          if (previewEl) {
-            previewEl.scrollTo({
-              top: previewEl.scrollHeight,
-              behavior: 'smooth'
-            })
+        }
+        
+        const previewEl = editorEl.querySelector('.md-editor-preview-wrapper')
+        if (previewEl) {
+          const scrollHeight = previewEl.scrollHeight
+          const clientHeight = previewEl.clientHeight
+          const currentScroll = previewEl.scrollTop
+          
+          if (scrollHeight - currentScroll > clientHeight * 0.5) {
+            previewEl.scrollTop = scrollHeight
           }
         }
       })
-    }, 100)
+    })
   }
 })()
 
@@ -795,6 +814,8 @@ const formatDocument = async () => {
   const originalContent = currentDoc.value.content
   currentDoc.value.content = '正在整理中...\n'
   
+  aiAbortController.value = new AbortController()
+  
   try {
     const response = await fetch('http://localhost:3000/api/ai/format-document', {
       method: 'POST',
@@ -805,7 +826,8 @@ const formatDocument = async () => {
         content: originalContent,
         title: currentDoc.value.title,
         stream: true
-      })
+      }),
+      signal: aiAbortController.value.signal
     })
     
     if (!response.ok) {
@@ -847,11 +869,17 @@ const formatDocument = async () => {
       message.success('文档整理完成')
     }
   } catch (e) {
-    console.error('文档整理失败:', e)
-    currentDoc.value.content = originalContent
-    message.error(e.message || '文档整理失败')
+    if (e.name === 'AbortError') {
+      message.info('已取消AI整理')
+      currentDoc.value.content = originalContent
+    } else {
+      console.error('文档整理失败:', e)
+      currentDoc.value.content = originalContent
+      message.error(e.message || '文档整理失败')
+    }
   } finally {
     formattingDoc.value = false
+    aiAbortController.value = null
   }
 }
 
@@ -864,6 +892,8 @@ const importFromUrl = async () => {
   importingUrl.value = true
   const originalContent = currentDoc.value.content || ''
   currentDoc.value.content = '正在读取网页内容...\n'
+  
+  aiAbortController.value = new AbortController()
   
   try {
     let result = ''
@@ -880,7 +910,8 @@ const importFromUrl = async () => {
           url: currentDoc.value.source_url,
           stream: true,
           continueFrom: continueFrom
-        })
+        }),
+        signal: aiAbortController.value.signal
       })
       
       if (!response.ok) {
@@ -939,11 +970,17 @@ const importFromUrl = async () => {
       message.success('网页内容导入完成')
     }
   } catch (e) {
-    console.error('导入网页失败:', e)
-    currentDoc.value.content = originalContent
-    message.error(e.message || '导入网页失败')
+    if (e.name === 'AbortError') {
+      message.info('已取消AI导入')
+      currentDoc.value.content = originalContent
+    } else {
+      console.error('导入网页失败:', e)
+      currentDoc.value.content = originalContent
+      message.error(e.message || '导入网页失败')
+    }
   } finally {
     importingUrl.value = false
+    aiAbortController.value = null
   }
 }
 
@@ -1181,6 +1218,13 @@ onMounted(() => {
   loadDocuments()
   loadFolders()
 })
+
+onUnmounted(() => {
+  if (aiAbortController.value) {
+    aiAbortController.value.abort()
+    aiAbortController.value = null
+  }
+})
 </script>
 
 <style scoped>
@@ -1328,6 +1372,15 @@ onMounted(() => {
   border: 2px dashed var(--primary-color);
 }
 
+.root-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.root-item.disabled:hover {
+  background: transparent;
+}
+
 .root-item .n-badge {
   margin-left: 4px;
 }
@@ -1356,6 +1409,15 @@ onMounted(() => {
 .doc-item.active {
   background: var(--primary-light);
   border-left-color: var(--primary-color);
+}
+
+.doc-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.doc-item.disabled:hover {
+  background: transparent;
 }
 
 .doc-item .doc-title {

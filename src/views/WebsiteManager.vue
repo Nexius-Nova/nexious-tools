@@ -681,24 +681,26 @@ const filteredScannedApps = computed(() => {
   return result;
 });
 
-const loadAppIcons = async (apps, limit = 36) => {
-  const appPaths = (apps || [])
-    .map((app) => app.path)
-    .filter(Boolean)
-    .slice(0, limit);
-
-  if (appPaths.length === 0 || !window.electronAPI?.getAppIcons) {
+const loadAppIcons = async (apps, batchSize = 30) => {
+  if (!apps || apps.length === 0 || !window.electronAPI?.getAppIcons) {
     return;
   }
 
-  try {
-    const iconMap = await window.electronAPI.getAppIcons(appPaths);
-    scannedApps.value = scannedApps.value.map((app) => ({
-      ...app,
-      icon: app.icon || iconMap?.[app.path] || ""
-    }));
-  } catch (error) {
-    console.error("加载应用图标失败:", error);
+  const allPaths = apps.map((app) => app.path).filter(Boolean);
+  const totalBatches = Math.ceil(allPaths.length / batchSize);
+  
+  for (let i = 0; i < totalBatches; i++) {
+    const batchPaths = allPaths.slice(i * batchSize, (i + 1) * batchSize);
+    
+    try {
+      const iconMap = await window.electronAPI.getAppIcons(batchPaths);
+      scannedApps.value = scannedApps.value.map((app) => ({
+        ...app,
+        icon: app.icon || iconMap?.[app.path] || ""
+      }));
+    } catch (error) {
+      console.error(`加载第 ${i + 1} 批图标失败:`, error);
+    }
   }
 };
 
@@ -761,7 +763,52 @@ const toggleAppSelection = (app) => {
 const filterWithAI = async () => {
   filtering.value = true;
   try {
-    const response = await websiteApi.filterApps(scannedApps.value);
+    const preFilteredApps = scannedApps.value.filter(app => {
+      const name = app.name.toLowerCase();
+      const publisher = (app.publisher || '').toLowerCase();
+      
+      const excludeKeywords = [
+        'update', 'updater', 'patch', 'hotfix', 'fix', 'repair',
+        'crash', 'crashreporter', 'crash handler', 'error report',
+        'helper', 'assistant', 'service', 'daemon', 'agent',
+        'runtime', 'framework', 'sdk', 'development kit',
+        ' redistributable', 'merge module', 'compatibility',
+        'setup', 'installer', 'bootstrap', 'deploy',
+        'driver', 'codec', 'plugin', 'extension pack',
+        'debug', 'test', 'demo', 'sample', 'example',
+        'readme', 'license', 'eula', 'documentation',
+        'toolkit', 'workbench', 'utility', 'wizard'
+      ];
+      
+      const excludePublisherKeywords = [
+        'microsoft corporation', 'intel', 'nvidia', 'amd', 'realtek',
+        'adobe systems', 'google llc', 'mozilla', 'apple inc'
+      ];
+      
+      for (const keyword of excludeKeywords) {
+        if (name.includes(keyword)) {
+          return false;
+        }
+      }
+      
+      if (publisher && excludePublisherKeywords.some(kw => publisher.includes(kw))) {
+        if (name.includes('update') || name.includes('patch') || 
+            name.includes('runtime') || name.includes('driver') ||
+            name.includes('service') || name.includes('helper')) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+    
+    if (preFilteredApps.length === 0) {
+      message.warning("预筛选后没有找到合适的应用");
+      filtering.value = false;
+      return;
+    }
+    
+    const response = await websiteApi.filterApps(preFilteredApps);
     scannedApps.value = response.data.data || [];
     selectedApps.value = scannedApps.value.map((app) => app.path || app.name);
     message.success(`AI筛选完成，保留 ${scannedApps.value.length} 个应用`);
