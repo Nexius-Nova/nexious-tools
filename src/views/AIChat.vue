@@ -82,41 +82,8 @@
     <div class="chat-main">
       <div class="chat-header">
         <div class="header-title">
-          <div class="ai-icon">
-            <n-icon size="20"><SparklesOutline /></n-icon>
-          </div>
           <n-h2>AI 对话</n-h2>
         </div>
-        <n-space>
-          <n-dropdown :options="templateOptions" @select="handleTemplateSelect">
-            <n-button>
-              <template #icon>
-                <n-icon><DocumentTextOutline /></n-icon>
-              </template>
-              {{ currentTemplate ? currentTemplate.name : "提示词模板" }}
-              <n-icon size="14" style="margin-left: 4px"
-                ><ChevronDownOutline
-              /></n-icon>
-            </n-button>
-          </n-dropdown>
-          <n-dropdown :options="agentOptions" @select="handleAgentSelect">
-            <n-button>
-              <template #icon>
-                <n-icon><RocketOutline /></n-icon>
-              </template>
-              {{ currentAgent ? currentAgent.label : "选择智能体" }}
-              <n-icon size="14" style="margin-left: 4px"
-                ><ChevronDownOutline
-              /></n-icon>
-            </n-button>
-          </n-dropdown>
-          <n-button @click="showReferenceModal = true">
-            <template #icon>
-              <n-icon><LinkOutline /></n-icon>
-            </template>
-            引用数据
-          </n-button>
-        </n-space>
       </div>
 
       <div class="chat-container" ref="chatContainer">
@@ -133,261 +100,241 @@
             </n-text>
           </div>
 
-          <div v-if="currentAgent && messages.length > 0" class="current-agent-badge">
-            <n-icon size="14"><RocketOutline /></n-icon>
-            <span>{{ currentAgent.label }}</span>
-          </div>
-
-          <div
-            v-for="(msg, index) in messages"
-            :key="index"
-            :class="['message', msg.role]"
-          >
-            <div class="message-avatar">
-              <n-avatar
-                v-if="msg.role === 'user'"
-                round
-                :size="36"
-                style="background: var(--primary-color)"
-              >
-                <n-icon><PersonOutline /></n-icon>
-              </n-avatar>
-              <n-avatar
-                v-else
-                round
-                :size="36"
-                style="
-                  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                "
-              >
-                <n-icon><SparklesOutline /></n-icon>
-              </n-avatar>
-            </div>
-            <div class="message-content">
-              <div
-                v-if="msg.references && msg.references.length > 0"
-                class="user-references"
-              >
-                <n-tag
-                  v-for="ref in msg.references"
-                  :key="ref.id"
-                  size="small"
-                  round
-                  :type="getRefTagType(ref.type)"
+          <div class="messages-center">
+            <div
+              v-for="(msg, index) in messages"
+              :key="index"
+              :class="['message-item', msg.role]"
+            >
+              <div class="message-body">
+                <div
+                  v-if="msg.quoted"
+                  class="message-quoted-preview"
                 >
-                  {{ ref.type }}: {{ ref.name }}
-                </n-tag>
-              </div>
-              <div
-                v-if="msg.images && msg.images.length > 0"
-                class="message-images"
-              >
-                <img
-                  v-for="(img, imgIndex) in msg.images"
-                  :key="imgIndex"
-                  :src="getImagePreviewSrc(img)"
-                  class="message-image"
-                  @click="previewImage(getImagePreviewSrc(img))"
-                />
-              </div>
-              <MessageContent :content="msg.content" />
-              <div
-                v-if="
-                  msg.role === 'assistant' &&
-                  msg.aiReferences &&
-                  msg.aiReferences.length > 0
-                "
-                class="message-references"
-              >
-                <n-text depth="3" style="font-size: 11px">引用数据：</n-text>
-                <n-space size="small">
+                  <div class="quoted-preview-line"></div>
+                  <div class="quoted-preview-content">
+                    <n-text depth="3" style="font-size: 12px">引用{{ msg.quoted.role === 'user' ? '你的' : 'AI' }}消息</n-text>
+                    <div class="quoted-preview-text">{{ msg.quoted.content }}</div>
+                  </div>
+                </div>
+                <div
+                  v-if="msg.references && msg.references.length > 0"
+                  class="message-references"
+                >
                   <n-tag
-                    v-for="ref in msg.aiReferences"
+                    v-for="ref in msg.references"
                     :key="ref.id"
                     size="small"
                     round
+                    :type="getRefTagType(ref.type)"
                   >
                     {{ ref.type }}: {{ ref.name }}
                   </n-tag>
-                </n-space>
-              </div>
-              <div class="message-actions">
-                <n-button text size="small" @click="quoteMessage(msg)">
-                  <template #icon>
-                    <n-icon><ChatboxOutline /></n-icon>
-                  </template>
-                  引用
-                </n-button>
-                <n-button text size="small" @click="copyMessage(msg.content)">
-                  <template #icon>
-                    <n-icon><CopyOutline /></n-icon>
-                  </template>
-                  复制
-                </n-button>
+                </div>
+                <div
+                  v-if="msg.images && msg.images.length > 0"
+                  class="message-images"
+                >
+                  <img
+                    v-for="(img, imgIndex) in msg.images"
+                    :key="imgIndex"
+                    :src="getImagePreviewSrc(img)"
+                    class="message-image"
+                    @click="previewImage(getImagePreviewSrc(img))"
+                  />
+                </div>
+                <div class="message-content-wrapper">
+                  <MessageContent :content="msg.content" />
+                </div>
+                <div
+                  v-if="
+                    msg.role === 'assistant' &&
+                    msg.aiReferences &&
+                    msg.aiReferences.length > 0
+                  "
+                  class="message-references"
+                >
+                  <n-text depth="3" style="font-size: 11px">引用数据：</n-text>
+                  <n-space size="small">
+                    <n-tag
+                      v-for="ref in msg.aiReferences"
+                      :key="ref.id"
+                      size="small"
+                      round
+                    >
+                      {{ ref.type }}: {{ ref.name }}
+                    </n-tag>
+                  </n-space>
+                </div>
+                <div class="message-actions">
+                  <n-button text size="small" @click="quoteMessage(msg)">
+                    <template #icon>
+                      <n-icon><ChatboxOutline /></n-icon>
+                    </template>
+                    引用
+                  </n-button>
+                  <n-button text size="small" @click="copyMessage(msg.content)">
+                    <template #icon>
+                      <n-icon><CopyOutline /></n-icon>
+                    </template>
+                    复制
+                  </n-button>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div v-if="loading" class="message assistant">
-            <div class="message-avatar">
-              <n-avatar
-                round
-                :size="36"
-                style="
-                  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                "
+            <div v-if="loading" class="message-item assistant">
+              <div class="message-body">
+                <div class="message-content-wrapper">
+                  <MessageContent v-if="streamingContent" :content="streamingContent" />
+                  <n-text v-else depth="3">
+                    <n-spin size="small" />
+                    <span style="margin-left: 8px">思考中...</span>
+                  </n-text>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="pendingData.type && !loading" class="inline-review">
+              <div class="inline-review-header">
+                <n-icon size="18"><RocketOutline /></n-icon>
+                <span class="inline-review-title"
+                  >{{ currentAgent?.label || "智能体" }} 已生成数据</span
+                >
+                <span class="inline-review-subtitle">请审核以下内容</span>
+              </div>
+
+              <div
+                v-if="pendingData.type === 'snippet'"
+                class="inline-review-content"
               >
-                <n-icon><SparklesOutline /></n-icon>
-              </n-avatar>
-            </div>
-            <div class="message-content">
-              <MessageContent :content="streamingContent" />
-              <n-text v-if="!streamingContent" depth="3">
-                <n-spin size="small" />
-                <span style="margin-left: 8px">思考中...</span>
-              </n-text>
-            </div>
-          </div>
+                <div class="review-field">
+                  <span class="review-label">标题：</span>
+                  <n-input v-model:value="pendingData.data.title" size="small" />
+                </div>
+                <div class="review-field">
+                  <span class="review-label">语言：</span>
+                  <n-select
+                    v-model:value="pendingData.data.language"
+                    :options="languageOptions"
+                    size="small"
+                    style="width: 150px"
+                  />
+                </div>
+                <div class="review-field">
+                  <span class="review-label">分类：</span>
+                  <n-select
+                    v-model:value="pendingData.data.category"
+                    :options="categoryOptions"
+                    size="small"
+                    style="width: 150px"
+                    placeholder="选择分类"
+                  />
+                </div>
+                <div class="review-field">
+                  <span class="review-label">描述：</span>
+                  <n-input
+                    v-model:value="pendingData.data.description"
+                    size="small"
+                  />
+                </div>
+                <div class="review-field">
+                  <span class="review-label">代码：</span>
+                  <n-input
+                    v-model:value="pendingData.data.code"
+                    type="textarea"
+                    :rows="6"
+                    size="small"
+                  />
+                </div>
+                <div class="review-actions">
+                  <n-button
+                    size="small"
+                    @click="pendingData = { type: '', data: {} }"
+                    >取消</n-button
+                  >
+                  <n-button
+                    type="primary"
+                    size="small"
+                    @click="confirmAddData"
+                    :loading="addingData"
+                    >确认添加</n-button
+                  >
+                </div>
+              </div>
 
-          <div v-if="pendingData.type && !loading" class="inline-review">
-            <div class="inline-review-header">
-              <n-icon size="18"><RocketOutline /></n-icon>
-              <span class="inline-review-title"
-                >{{ currentAgent?.label || "智能体" }} 已生成数据</span
+              <div
+                v-else-if="pendingData.type === 'document'"
+                class="inline-review-content"
               >
-              <span class="inline-review-subtitle">请审核以下内容</span>
-            </div>
+                <div class="review-field">
+                  <span class="review-label">标题：</span>
+                  <n-input v-model:value="pendingData.data.title" size="small" />
+                </div>
+                <div class="review-field">
+                  <span class="review-label">内容：</span>
+                  <n-input
+                    v-model:value="pendingData.data.content"
+                    type="textarea"
+                    :rows="8"
+                    size="small"
+                  />
+                </div>
+                <div class="review-actions">
+                  <n-button
+                    size="small"
+                    @click="pendingData = { type: '', data: {} }"
+                    >取消</n-button
+                  >
+                  <n-button
+                    type="primary"
+                    size="small"
+                    @click="confirmAddData"
+                    :loading="addingData"
+                    >确认添加</n-button
+                  >
+                </div>
+              </div>
 
-            <div
-              v-if="pendingData.type === 'snippet'"
-              class="inline-review-content"
-            >
-              <div class="review-field">
-                <span class="review-label">标题：</span>
-                <n-input v-model:value="pendingData.data.title" size="small" />
-              </div>
-              <div class="review-field">
-                <span class="review-label">语言：</span>
-                <n-select
-                  v-model:value="pendingData.data.language"
-                  :options="languageOptions"
-                  size="small"
-                  style="width: 150px"
-                />
-              </div>
-              <div class="review-field">
-                <span class="review-label">分类：</span>
-                <n-select
-                  v-model:value="pendingData.data.category"
-                  :options="categoryOptions"
-                  size="small"
-                  style="width: 150px"
-                  placeholder="选择分类"
-                />
-              </div>
-              <div class="review-field">
-                <span class="review-label">描述：</span>
-                <n-input
-                  v-model:value="pendingData.data.description"
-                  size="small"
-                />
-              </div>
-              <div class="review-field">
-                <span class="review-label">代码：</span>
-                <n-input
-                  v-model:value="pendingData.data.code"
-                  type="textarea"
-                  :rows="6"
-                  size="small"
-                />
-              </div>
-              <div class="review-actions">
-                <n-button
-                  size="small"
-                  @click="pendingData = { type: '', data: {} }"
-                  >取消</n-button
-                >
-                <n-button
-                  type="primary"
-                  size="small"
-                  @click="confirmAddData"
-                  :loading="addingData"
-                  >确认添加</n-button
-                >
-              </div>
-            </div>
-
-            <div
-              v-else-if="pendingData.type === 'document'"
-              class="inline-review-content"
-            >
-              <div class="review-field">
-                <span class="review-label">标题：</span>
-                <n-input v-model:value="pendingData.data.title" size="small" />
-              </div>
-              <div class="review-field">
-                <span class="review-label">内容：</span>
-                <n-input
-                  v-model:value="pendingData.data.content"
-                  type="textarea"
-                  :rows="8"
-                  size="small"
-                />
-              </div>
-              <div class="review-actions">
-                <n-button
-                  size="small"
-                  @click="pendingData = { type: '', data: {} }"
-                  >取消</n-button
-                >
-                <n-button
-                  type="primary"
-                  size="small"
-                  @click="confirmAddData"
-                  :loading="addingData"
-                  >确认添加</n-button
-                >
-              </div>
-            </div>
-
-            <div
-              v-else-if="pendingData.type === 'website'"
-              class="inline-review-content"
-            >
-              <div class="review-field">
-                <span class="review-label">名称：</span>
-                <n-input v-model:value="pendingData.data.name" size="small" />
-              </div>
-              <div class="review-field">
-                <span class="review-label">URL：</span>
-                <n-input v-model:value="pendingData.data.url" size="small" />
-              </div>
-              <div class="review-field">
-                <span class="review-label">别名：</span>
-                <n-input v-model:value="pendingData.data.alias" size="small" />
-              </div>
-              <div class="review-field">
-                <span class="review-label">描述：</span>
-                <n-input
-                  v-model:value="pendingData.data.description"
-                  type="textarea"
-                  :rows="2"
-                  size="small"
-                />
-              </div>
-              <div class="review-actions">
-                <n-button
-                  size="small"
-                  @click="pendingData = { type: '', data: {} }"
-                  >取消</n-button
-                >
-                <n-button
-                  type="primary"
-                  size="small"
-                  @click="confirmAddData"
-                  :loading="addingData"
-                  >确认添加</n-button
-                >
+              <div
+                v-else-if="pendingData.type === 'website'"
+                class="inline-review-content"
+              >
+                <div class="review-field">
+                  <span class="review-label">名称：</span>
+                  <n-input v-model:value="pendingData.data.name" size="small" />
+                </div>
+                <div class="review-field">
+                  <span class="review-label">URL：</span>
+                  <n-input v-model:value="pendingData.data.url" size="small" />
+                </div>
+                <div class="review-field">
+                  <span class="review-label">别名：</span>
+                  <n-input v-model:value="pendingData.data.alias" size="small" />
+                </div>
+                <div class="review-field">
+                  <span class="review-label">描述：</span>
+                  <n-input
+                    v-model:value="pendingData.data.description"
+                    type="textarea"
+                    :rows="2"
+                    size="small"
+                  />
+                </div>
+                <div class="review-actions">
+                  <n-button
+                    size="small"
+                    @click="pendingData = { type: '', data: {} }"
+                    >取消</n-button
+                  >
+                  <n-button
+                    type="primary"
+                    size="small"
+                    @click="confirmAddData"
+                    :loading="addingData"
+                    >确认添加</n-button
+                  >
+                </div>
               </div>
             </div>
           </div>
@@ -395,83 +342,127 @@
       </div>
 
       <div class="input-area">
-        <div v-if="selectedReferences.length > 0" class="selected-references">
-          <n-tag
-            v-for="ref in selectedReferences"
-            :key="ref.id"
-            closable
-            size="small"
-            round
-            :type="getRefTagType(ref.type)"
-            @close="removeReference(ref)"
-          >
-            {{ ref.type }}: {{ ref.name }}
-          </n-tag>
-        </div>
-        <div v-if="selectedImages.length > 0" class="selected-images">
-          <div
-            v-for="(img, index) in selectedImages"
-            :key="index"
-            class="image-preview-item"
-          >
-            <img :src="getImagePreviewSrc(img)" :alt="img.name" />
+        <div class="input-area-center">
+          <div class="input-toolbar">
+            <n-dropdown :options="templateOptions" @select="handleTemplateSelect">
+              <n-button size="small" quaternary>
+                <template #icon>
+                  <n-icon><DocumentTextOutline /></n-icon>
+                </template>
+                {{ currentTemplate ? currentTemplate.name : "提示词模板" }}
+                <n-icon size="12" style="margin-left: 4px"><ChevronDownOutline /></n-icon>
+              </n-button>
+            </n-dropdown>
+            <n-dropdown :options="agentOptions" @select="handleAgentSelect">
+              <n-button size="small" quaternary>
+                <template #icon>
+                  <n-icon><RocketOutline /></n-icon>
+                </template>
+                {{ currentAgent ? currentAgent.label : "智能体" }}
+                <n-icon size="12" style="margin-left: 4px"><ChevronDownOutline /></n-icon>
+              </n-button>
+            </n-dropdown>
+            <n-button size="small" quaternary @click="showReferenceModal = true">
+              <template #icon>
+                <n-icon><LinkOutline /></n-icon>
+              </template>
+              引用数据
+            </n-button>
+          </div>
+          <div v-if="selectedReferences.length > 0" class="selected-references">
+            <n-tag
+              v-for="ref in selectedReferences"
+              :key="ref.id"
+              closable
+              size="small"
+              round
+              :type="getRefTagType(ref.type)"
+              @close="removeReference(ref)"
+            >
+              {{ ref.type }}: {{ ref.name }}
+            </n-tag>
+          </div>
+          <div v-if="quotedMessage" class="quoted-message-card">
+            <div class="quoted-message-header">
+              <n-icon size="14"><ChatboxOutline /></n-icon>
+              <span>引用{{ quotedMessage.role === 'user' ? '你的' : 'AI' }}消息</span>
+              <n-button text size="tiny" @click="quotedMessage = null">
+                <template #icon>
+                  <n-icon size="14"><CloseOutline /></n-icon>
+                </template>
+              </n-button>
+            </div>
+            <div class="quoted-message-content">
+              {{ quotedMessage.content }}{{ quotedMessage.fullContent.length > 200 ? '...' : '' }}
+            </div>
+          </div>
+          <div v-if="selectedImages.length > 0" class="selected-images">
+            <div
+              v-for="(img, index) in selectedImages"
+              :key="index"
+              class="image-preview-item"
+            >
+              <img :src="getImagePreviewSrc(img)" :alt="img.name" />
+              <n-button
+                circle
+                size="tiny"
+                class="remove-image-btn"
+                @click="removeImage(index)"
+              >
+                <template #icon>
+                  <n-icon><CloseOutline /></n-icon>
+                </template>
+              </n-button>
+            </div>
+          </div>
+          <div class="input-row">
             <n-button
               circle
-              size="tiny"
-              class="remove-image-btn"
-              @click="removeImage(index)"
+              size="large"
+              quaternary
+              :loading="uploadingImage"
+              @click="triggerImageUpload"
+              :disabled="loading || selectedImages.length >= 5"
             >
               <template #icon>
-                <n-icon><CloseOutline /></n-icon>
+                <n-icon><ImageOutline /></n-icon>
+              </template>
+            </n-button>
+            <n-input
+              class="input-textarea"
+              v-model:value="inputMessage"
+              type="textarea"
+              size="large"
+              placeholder="输入消息... (Shift+Enter 换行，Enter 发送)"
+              :autosize="{ minRows: 1, maxRows: 4 }"
+              @keydown="handleKeydown"
+              :disabled="loading"
+              clearable
+            />
+            <n-button
+              v-if="loading"
+              type="error"
+              circle
+              size="large"
+              @click="stopGeneration"
+            >
+              <template #icon>
+                <n-icon><StopOutline /></n-icon>
+              </template>
+            </n-button>
+            <n-button
+              v-else
+              type="primary"
+              circle
+              size="large"
+              @click="sendMessage"
+              :disabled="!inputMessage.trim() && selectedImages.length === 0"
+            >
+              <template #icon>
+                <n-icon><SendOutline /></n-icon>
               </template>
             </n-button>
           </div>
-        </div>
-        <div class="input-row">
-          <n-button
-            circle
-            size="large"
-            quaternary
-            :loading="uploadingImage"
-            @click="triggerImageUpload"
-            :disabled="loading || selectedImages.length >= 5"
-          >
-            <template #icon>
-              <n-icon><ImageOutline /></n-icon>
-            </template>
-          </n-button>
-          <n-input
-            v-model:value="inputMessage"
-            type="textarea"
-            placeholder="输入消息... (Shift+Enter 换行，Enter 发送)"
-            :autosize="{ minRows: 1, maxRows: 4 }"
-            @keydown="handleKeydown"
-            :disabled="loading"
-            clearable
-          />
-          <n-button
-            v-if="loading"
-            type="error"
-            circle
-            size="large"
-            @click="stopGeneration"
-          >
-            <template #icon>
-              <n-icon><StopOutline /></n-icon>
-            </template>
-          </n-button>
-          <n-button
-            v-else
-            type="primary"
-            circle
-            size="large"
-            @click="sendMessage"
-            :disabled="!inputMessage.trim() && selectedImages.length === 0"
-          >
-            <template #icon>
-              <n-icon><SendOutline /></n-icon>
-            </template>
-          </n-button>
         </div>
       </div>
 
@@ -872,6 +863,7 @@ const documentSearch = ref("");
 const currentAgent = ref(null);
 const pendingData = ref({ type: "", data: {} });
 const addingData = ref(false);
+const quotedMessage = ref(null);
 
 const templates = ref([]);
 const currentTemplate = ref(null);
@@ -1085,7 +1077,8 @@ const loadConversation = async (conversationId) => {
       content: m.content,
       references: m.references || [],
       images: m.images || [],
-      aiReferences: m.role === "assistant" ? m.references || [] : []
+      aiReferences: m.role === "assistant" ? m.references || [] : [],
+      quoted: m.quoted || null
     }));
     currentConversationId.value = conversationId;
     scrollToBottom();
@@ -1232,6 +1225,7 @@ const startNewConversation = () => {
   messages.value = [];
   currentConversationId.value = null;
   selectedReferences.value = [];
+  quotedMessage.value = null;
 };
 
 const addReference = (ref) => {
@@ -1325,8 +1319,11 @@ const previewImage = (url) => {
 };
 
 const quoteMessage = (msg) => {
-  const quotedContent = msg.content.substring(0, 200);
-  inputMessage.value = `> ${quotedContent}${msg.content.length > 200 ? "..." : ""}\n\n`;
+  quotedMessage.value = {
+    content: msg.content.substring(0, 200),
+    fullContent: msg.content,
+    role: msg.role
+  };
 };
 
 const copyMessage = async (content) => {
@@ -1364,7 +1361,7 @@ const buildReferenceContext = () => {
   return context;
 };
 
-const saveMessage = async (role, content, references, images = []) => {
+const saveMessage = async (role, content, references, images = [], quoted = null) => {
   try {
     if (!currentConversationId.value) {
       currentConversationId.value = crypto.randomUUID();
@@ -1374,7 +1371,8 @@ const saveMessage = async (role, content, references, images = []) => {
       role,
       content,
       references,
-      images
+      images,
+      quoted
     });
     await loadConversations();
   } catch (error) {
@@ -1389,20 +1387,27 @@ const sendMessage = async () => {
 
   const references = [...selectedReferences.value];
   const images = [...selectedImages.value];
-  const contextContent = content + buildReferenceContext();
+  const quoted = quotedMessage.value ? { ...quotedMessage.value } : null;
+  
+  let contextContent = content + buildReferenceContext();
+  if (quoted) {
+    contextContent = `引用消息：\n${quoted.fullContent}\n\n---\n\n${contextContent}`;
+  }
 
   messages.value.push({
     role: "user",
     content,
     references,
-    images
+    images,
+    quoted
   });
 
-  await saveMessage("user", content, references, images);
+  await saveMessage("user", content, references, images, quoted);
 
   inputMessage.value = "";
   selectedReferences.value = [];
   selectedImages.value = [];
+  quotedMessage.value = null;
   scrollToBottom();
 
   loading.value = true;
@@ -1972,7 +1977,7 @@ onMounted(() => {
 
 .chat-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-color);
@@ -1985,31 +1990,31 @@ onMounted(() => {
   gap: 12px;
 }
 
-.ai-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-}
-
 .chat-header .n-h2 {
   margin: 0;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .chat-container {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 24px 20px;
 }
 
 .messages-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  min-height: 100%;
+}
+
+.messages-center {
+  max-width: 800px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .empty-chat {
@@ -2017,53 +2022,54 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 300px;
+  height: 400px;
   gap: 16px;
 }
 
 .empty-icon {
-  width: 100px;
-  height: 100px;
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
-  background: linear-gradient(
-    135deg,
-    rgba(102, 126, 234, 0.1) 0%,
-    rgba(118, 75, 162, 0.1) 100%
-  );
+  background: var(--primary-light);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #667eea;
+  color: var(--primary-color);
 }
 
-.message {
+.message-item {
   display: flex;
-  gap: 12px;
+  margin-bottom: 20px;
 }
 
-.message.user {
-  flex-direction: row-reverse;
+.message-item.assistant {
+  justify-content: flex-start;
 }
 
-.message-avatar {
-  flex-shrink: 0;
+.message-item.user {
+  justify-content: flex-end;
 }
 
-.message-content {
-  max-width: 70%;
-  padding: 14px 18px;
-  border-radius: 16px;
+.message-body {
+  max-width: 65%;
+  min-width: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message-content-wrapper {
+  border-radius: 12px;
+  line-height: 1.6;
+  font-size: 14px;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.message-item.user .message-content-wrapper {
   background: var(--bg-color);
-}
-
-.message.user .message-content {
-  background: var(--primary-light);
-}
-
-.user-references {
-  margin-bottom: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 12px 16px;
+  color: var(--text-primary);
 }
 
 .message-text {
@@ -2092,54 +2098,145 @@ onMounted(() => {
 }
 
 .message-references {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--hover-color);
+  border-radius: 8px;
+  font-size: 12px;
 }
 
-.current-agent-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  background: rgba(82, 196, 26, 0.1);
-  border: 1px solid rgba(82, 196, 26, 0.2);
-  border-radius: 16px;
-  font-size: 12px;
-  color: #52c41a;
+.message-quoted-preview {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  background: var(--hover-color);
+  border-radius: 8px;
+}
+
+.quoted-preview-line {
+  width: 3px;
+  background: var(--primary-color);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.quoted-preview-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.quoted-preview-text {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quoted-message-card {
   margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--hover-color);
+}
+
+.quoted-message-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.quoted-message-header .n-button {
+  margin-left: auto;
+}
+
+.quoted-message-content {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .message-actions {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-color);
   display: flex;
-  gap: 8px;
+  gap: 12px;
+  padding-top: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.message-item:hover .message-actions {
+  opacity: 1;
+}
+
+.message-actions .n-button {
+  font-size: 13px;
+  padding: 0;
+  min-width: auto;
 }
 
 .input-area {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px 20px;
-  border-top: 1px solid var(--border-color);
-  background: var(--card-bg);
+  gap: 12px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  width: 800px;
+  margin: 10px auto;
+  box-sizing: border-box;
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.15);
+}
+
+.input-area-center {
+  max-width: 800px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.input-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.input-toolbar .n-button {
+  font-size: 12px;
 }
 
 .selected-references {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 10px 14px;
-  background: var(--bg-color);
+  padding: 0 10px;
+  /* background: var(--bg-color); */
   border-radius: 10px;
+  /* border: 1px solid var(--border-color); */
+  margin-bottom: 10px;
 }
 
 .input-row {
   display: flex;
   gap: 12px;
   align-items: flex-end;
+  border-radius: 8px;
+  transition: border-color 0.2s;
+}
+
+.input-row:focus-within {
+  border-color: var(--primary-color);
 }
 
 .input-row .n-input {
@@ -2372,8 +2469,8 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 10px 14px;
-  background: var(--bg-color);
+  padding: 0 10px;
+  margin-bottom: 10px;
   border-radius: 10px;
 }
 
@@ -2394,31 +2491,122 @@ onMounted(() => {
 
 .remove-image-btn {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  background: var(--error-color) !important;
-  color: #fff !important;
+  top: 0px;
+  right: 0px;
+  background: var(--bg-color) !important;
+  color: var(--text-color-3) !important;
   width: 18px !important;
   height: 18px !important;
-  min-width: 18px !important;
+  border: 1px solid var(--border-color);
 }
 
 .message-images {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .message-image {
-  max-width: 200px;
-  max-height: 200px;
-  border-radius: 8px;
+  max-width: 240px;
+  max-height: 240px;
+  border-radius: 12px;
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: all 0.2s;
 }
 
 .message-image:hover {
   transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 1024px) {
+  .messages-center,
+  .input-area-center {
+    max-width: 100%;
+    padding: 0 8px;
+  }
+  
+  .chat-container {
+    padding: 16px 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 180px;
+  }
+  
+  .message-body {
+    max-width: 75%;
+  }
+  
+  .message-content-wrapper {
+    padding: 10px 12px;
+  }
+  
+  .input-area {
+    padding: 12px;
+  }
+  
+  .input-row {
+    padding: 6px 10px;
+  }
+}
+
+@media (max-width: 640px) {
+  .sidebar {
+    display: none;
+  }
+  
+  .chat-header {
+    padding: 12px 16px;
+  }
+  
+  .header-title .n-h2 {
+    font-size: 16px;
+  }
+  
+  .chat-container {
+    padding: 12px 8px;
+  }
+  
+  .messages-center {
+    gap: 16px;
+  }
+  
+  .empty-chat {
+    height: 300px;
+  }
+  
+  .empty-icon {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .message-body {
+    max-width: 85%;
+  }
+  
+  .message-content-wrapper {
+    padding: 10px 12px;
+  }
+  
+  .input-area {
+    padding: 8px;
+  }
+  
+  .input-toolbar {
+    gap: 6px;
+  }
+  
+  .input-toolbar .n-button {
+    font-size: 11px;
+  }
+  
+  .input-row {
+    padding: 6px 8px;
+    gap: 8px;
+  }
 }
 </style>

@@ -9,6 +9,48 @@ const SETTINGS_API_URL = "http://localhost:3000/api/settings/global_shortcut"
 const SETTINGS_FETCH_RETRY_COUNT = 10
 const SETTINGS_FETCH_RETRY_DELAY = 500
 
+const UNINSTALLER_KEYWORDS = [
+  'uninstall', 'uninstaller', 'unins', 'remove', 'remover',
+  '卸载', '卸载程序', '卸载工具', '移除', '删除程序'
+]
+
+const UNINSTALLER_PATH_PATTERNS = [
+  /unins\d{3}\.exe$/i,
+  /uninstall\.exe$/i,
+  /uninst\.exe$/i,
+  /unins\d*\.exe$/i
+]
+
+function isUninstaller(app) {
+  if (!app || !app.name) return false
+  
+  const appName = app.name.toLowerCase()
+  const appPath = (app.path || '').toLowerCase()
+  const exeName = path.basename(appPath)
+  
+  for (const keyword of UNINSTALLER_KEYWORDS) {
+    if (appName.includes(keyword.toLowerCase())) {
+      return true
+    }
+  }
+  
+  for (const pattern of UNINSTALLER_PATH_PATTERNS) {
+    if (pattern.test(exeName)) {
+      return true
+    }
+  }
+  
+  if (appPath.includes('uninstall') || appPath.includes('unins')) {
+    const pathParts = appPath.split(/[/\\]/)
+    const secondLastPart = pathParts.length > 1 ? pathParts[pathParts.length - 2] : ''
+    if (secondLastPart.includes('uninstall') || secondLastPart.includes('unins')) {
+      return true
+    }
+  }
+  
+  return false
+}
+
 let iconExtractor
 try {
   let iconExtractorPath
@@ -32,7 +74,7 @@ const appScanCache = {
 }
 const iconCache = new Map()
 const APP_SCAN_CACHE_TTL = 5 * 60 * 1000
-const ICON_BATCH_SIZE = 12
+const ICON_BATCH_SIZE = 30
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -419,7 +461,7 @@ async function extractIcon(iconPath) {
     const timeout = setTimeout(() => {
       child.kill()
       resolve(null)
-    }, 3000)
+    }, 2000)
     
     child.on("close", (code) => {
       clearTimeout(timeout)
@@ -552,7 +594,7 @@ function extractIconWithExtractor(iconPath) {
       iconExtractor.emitter.removeListener("icon", handler)
       iconExtractor.emitter.removeListener("error", errorHandler)
       resolve(null)
-    }, 1500)
+    }, 1000)
     
     const handler = (data) => {
       if (data.Context === cleanPath) {
@@ -625,9 +667,11 @@ ipcMain.handle("auto-import-apps", async () => {
     }
   }
 
-  appScanCache.apps = apps
+  const filteredApps = apps.filter(app => !isUninstaller(app))
+  
+  appScanCache.apps = filteredApps
   appScanCache.expiresAt = now + APP_SCAN_CACHE_TTL
-  return apps
+  return filteredApps
 })
 
 async function parseLnkDirectory(dirPath) {
@@ -684,7 +728,7 @@ async function parseLnkDirectory(dirPath) {
   const lnkResults = (await Promise.all(lnkPromises)).filter(Boolean)
   shortcuts.push(...lnkResults)
 
-  return shortcuts
+  return shortcuts.filter(app => !isUninstaller(app))
 }
 
 async function getDesktopShortcuts() {
@@ -709,129 +753,128 @@ async function getStartMenuShortcuts() {
 
 async function getRegistryApps() {
   const apps = []
-  const regKeys = [
-    "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-    "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-    "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
-  ]
-
   const seenNames = new Set()
-  const subkeyPromises = regKeys.map(key => queryRegSubkeys(key))
-  const allSubkeys = await Promise.all(subkeyPromises)
-  const subkeys = allSubkeys.flat()
-
-  const batchSize = 50
-  for (let i = 0; i < subkeys.length; i += batchSize) {
-    const batch = subkeys.slice(i, i + batchSize)
-    const valuePromises = batch.map(subkey => 
-      queryRegValues(subkey).then(values => ({ subkey, values }))
+  
+  const psScript = `
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $ErrorActionPreference = 'SilentlyContinue'
+    $keys = @(
+      'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',
+      'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',
+      'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'
     )
-    const results = await Promise.all(valuePromises)
-    
-    for (const { values } of results) {
-      try {
-        const displayName = values["DisplayName"]
-        if (!displayName || seenNames.has(displayName.toLowerCase())) continue
-
-        const displayIcon = values["DisplayIcon"]
-        const installLocation = values["InstallLocation"]
-        const displayVersion = values["DisplayVersion"]
-        const publisher = values["Publisher"]
-        const systemComponent = values["SystemComponent"]
-        const releaseType = values["ReleaseType"]
-        const parentDisplayName = values["ParentDisplayName"]
-
-        if (systemComponent === "0x1" || releaseType || parentDisplayName) continue
-        if (publisher && /microsoft|windows|update|patch|security/i.test(publisher) && /update|patch|security|framework|runtime/i.test(displayName)) continue
-
-        let exePath = ""
-        if (displayIcon) {
-          const iconPath = displayIcon.split(",")[0].trim().replace(/^["']|["']$/g, "")
-          if (iconPath && fs.existsSync(iconPath)) {
-            exePath = iconPath
+    $results = @()
+    foreach ($key in $keys) {
+      Get-ItemProperty $key -ErrorAction SilentlyContinue | ForEach-Object {
+        if ($_.DisplayName) {
+          $results += [PSCustomObject]@{
+            DisplayName = $_.DisplayName
+            DisplayIcon = $_.DisplayIcon
+            InstallLocation = $_.InstallLocation
+            DisplayVersion = $_.DisplayVersion
+            Publisher = $_.Publisher
+            SystemComponent = $_.SystemComponent
+            ReleaseType = $_.ReleaseType
+            ParentDisplayName = $_.ParentDisplayName
           }
         }
-
-        if (!exePath && installLocation) {
-          const cleanInstall = installLocation.replace(/^["']|["']$/g, "")
-          if (fs.existsSync(cleanInstall)) {
-            const exeFiles = findExeInDir(cleanInstall)
-            if (exeFiles.length > 0) {
-              exePath = exeFiles[0]
-            }
-          }
-        }
-
-        if (!exePath) continue
-        if (!exePath.toLowerCase().endsWith(".exe")) continue
-        if (!fs.existsSync(exePath)) continue
-
-        seenNames.add(displayName.toLowerCase())
-
-        apps.push({
-          name: displayName,
-          path: exePath,
-          icon: "",
-          version: displayVersion || "",
-          publisher: publisher || ""
-        })
-      } catch (e) {
-        // ignore
       }
     }
-  }
-
-  return apps
-}
-
-function queryRegSubkeys(key) {
+    $results | ConvertTo-Json -Depth 2 -Compress
+  `
+  
   return new Promise((resolve) => {
-    const proc = spawn("cmd", ["/c", "chcp", "65001", ">", "nul", "&&", "reg", "query", key], {
-      shell: false,
-      windowsHide: true
+    const proc = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", psScript], {
+      stdio: "pipe",
+      windowsHide: true,
+      env: { ...process.env, POWERSHELL_TELEMETRY_OPTOUT: "1" }
     })
+    
     let stdout = ""
+    let timeout = setTimeout(() => {
+      proc.kill()
+      resolve(apps)
+    }, 15000)
+    
     proc.stdout.on("data", (data) => {
       stdout += data.toString("utf8")
     })
+    
     proc.on("close", () => {
-      const lines = stdout.split("\n").map(l => l.trim()).filter(l => l && l !== key)
-      resolve(lines)
-    })
-    proc.on("error", () => {
-      resolve([])
-    })
-  })
-}
-
-function queryRegValues(key) {
-  return new Promise((resolve) => {
-    const proc = spawn("cmd", ["/c", "chcp", "65001", ">", "nul", "&&", "reg", "query", key], {
-      shell: false,
-      windowsHide: true
-    })
-    let stdout = ""
-    proc.stdout.on("data", (data) => {
-      stdout += data.toString("utf8")
-    })
-    proc.on("close", () => {
-      const values = {}
-      const lines = stdout.split("\n").map(l => l.trim()).filter(Boolean)
-      for (const line of lines) {
-        const match = line.match(/^\s*(\S+)\s+REG_\S+\s+(.+)$/i)
-        if (match) {
-          values[match[1]] = match[2].trim()
+      clearTimeout(timeout)
+      try {
+        let items = []
+        if (stdout.trim()) {
+          const parsed = JSON.parse(stdout)
+          items = Array.isArray(parsed) ? parsed : [parsed]
         }
+        
+        for (const item of items) {
+          try {
+            const displayName = item.DisplayName
+            if (!displayName || seenNames.has(displayName.toLowerCase())) continue
+            
+            const publisher = item.Publisher || ""
+            const systemComponent = item.SystemComponent
+            const releaseType = item.ReleaseType
+            const parentDisplayName = item.ParentDisplayName
+            
+            if (systemComponent === 1 || releaseType || parentDisplayName) continue
+            if (publisher && /microsoft|windows|update|patch|security/i.test(publisher) && /update|patch|security|framework|runtime/i.test(displayName)) continue
+            
+            let exePath = ""
+            const displayIcon = item.DisplayIcon
+            if (displayIcon) {
+              const iconPath = displayIcon.split(",")[0].trim().replace(/^["']|["']$/g, "")
+              if (iconPath && fs.existsSync(iconPath)) {
+                exePath = iconPath
+              }
+            }
+            
+            const installLocation = item.InstallLocation
+            if (!exePath && installLocation) {
+              const cleanInstall = installLocation.replace(/^["']|["']$/g, "")
+              if (fs.existsSync(cleanInstall)) {
+                const exeFiles = findExeInDir(cleanInstall)
+                if (exeFiles.length > 0) {
+                  exePath = exeFiles[0]
+                }
+              }
+            }
+            
+            if (!exePath || !exePath.toLowerCase().endsWith(".exe") || !fs.existsSync(exePath)) continue
+            
+            seenNames.add(displayName.toLowerCase())
+            
+            const appData = {
+              name: displayName,
+              path: exePath,
+              icon: "",
+              version: item.DisplayVersion || "",
+              publisher: publisher
+            }
+            
+            if (!isUninstaller(appData)) {
+              apps.push(appData)
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+      } catch (e) {
+        console.error("解析注册表数据失败:", e.message)
       }
-      resolve(values)
+      resolve(apps)
     })
+    
     proc.on("error", () => {
-      resolve({})
+      clearTimeout(timeout)
+      resolve(apps)
     })
   })
 }
 
-function findExeInDir(dirPath, maxDepth = 2) {
+function findExeInDir(dirPath, maxDepth = 1) {
   const results = []
   try {
     _findExeRecursive(dirPath, results, 0, maxDepth)
@@ -842,7 +885,7 @@ function findExeInDir(dirPath, maxDepth = 2) {
 }
 
 function _findExeRecursive(dirPath, results, depth, maxDepth) {
-  if (depth > maxDepth || results.length >= 3) return
+  if (depth > maxDepth || results.length >= 1) return
   let entries
   try {
     entries = fs.readdirSync(dirPath, { withFileTypes: true })
@@ -850,7 +893,7 @@ function _findExeRecursive(dirPath, results, depth, maxDepth) {
     return
   }
   for (const entry of entries) {
-    if (results.length >= 3) return
+    if (results.length >= 1) return
     if (entry.isFile() && entry.name.toLowerCase().endsWith(".exe")) {
       const exeName = entry.name.toLowerCase()
       const dirName = path.basename(dirPath).toLowerCase()
@@ -995,6 +1038,4 @@ ipcMain.handle("get-browser-bookmarks-path", async () => {
       paths.push({ browser: 'Edge', path: edgePath })
     }
   }
-  
-  return paths
 })
