@@ -38,9 +38,7 @@
         ]
       }
     ],
-    "executableName": "NexiousTools",
-    "icon": "electron/assets/logo.svg",
-    "sign": null
+    "executableName": "NexiousTools"
   },
   "nsis": {
     "oneClick": false,
@@ -48,8 +46,6 @@
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "Nexious Tools",
-    "deleteAppDataOnUninstall": false,
-    "installerIcon": "electron/assets/logo.svg",
-    "uninstallerIcon": "electron/assets/logo.svg"
+    "deleteAppDataOnUninstall": false
   }
 }
