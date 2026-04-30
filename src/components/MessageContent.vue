@@ -28,9 +28,11 @@ const emit = defineEmits(['copy'])
 const parseMarkdown = (text) => {
   let html = text
   
-  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>')
-  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>')
-  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
+  html = html.replace(/<br\s*\/?>\s*\n/g, '\n')
+  
+  html = html.replace(/\n+### (.+?)\n+/g, '\n<h3>$1</h3>\n')
+  html = html.replace(/\n+## (.+?)\n+/g, '\n<h2>$1</h2>\n')
+  html = html.replace(/\n+# (.+?)\n+/g, '\n<h1>$1</h1>\n')
   
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
   
@@ -46,7 +48,10 @@ const parseMarkdown = (text) => {
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
   html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>')
   
+  html = html.replace(/\n{3,}/g, '\n\n')
   html = html.replace(/\n/g, '<br>')
+  html = html.replace(/<br><(h[1-3])>/g, '<$1>')
+  html = html.replace(/<\/(h[1-3])><br>/g, '</$1>')
   
   return html
 }

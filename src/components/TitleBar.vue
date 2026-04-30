@@ -58,9 +58,22 @@
       <span class="title">Nexious Tools</span>
     </div>
     <div class="title-center">
-      <div class="search-hint"><kbd>Ctrl</kbd> + <kbd>K</kbd> 快速搜索 <span class="hint-divider">|</span> <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>?</kbd> 帮助</div>
+      <div class="search-hint">
+        <template v-if="showBackButton">
+          <kbd>Esc</kbd> 返回搜索窗 <span class="hint-divider">|</span>
+        </template>
+        <kbd>Ctrl</kbd> + <kbd>K</kbd> 页面搜索 <span class="hint-divider">|</span> <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>?</kbd> 帮助
+      </div>
     </div>
     <div class="title-right">
+      <button v-if="showBackButton" class="title-btn back-btn" @click="$emit('back')" title="返回快速搜索 (Esc)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4 14 10 14 10 20"></polyline>
+          <polyline points="20 10 14 10 14 4"></polyline>
+          <line x1="14" y1="10" x2="21" y2="3"></line>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      </button>
       <button class="title-btn minimize" @click="minimize">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
           <rect y="5" width="12" height="2" rx="1" />
@@ -93,6 +106,15 @@
 </template>
 
 <script setup>
+defineProps({
+  showBackButton: {
+    type: Boolean,
+    default: false
+  }
+})
+
+defineEmits(['back'])
+
 const minimize = () => {
   window.electronAPI?.minimizeWindow();
 };
@@ -193,5 +215,16 @@ const close = () => {
 .title-btn.close:hover {
   background: #ff4d4f;
   color: white;
+}
+
+.back-btn:hover {
+  background: var(--primary-light);
+  color: var(--primary-color);
+}
+
+@media (max-width: 768px) {
+  .search-hint {
+    display: none;
+  }
 }
 </style>

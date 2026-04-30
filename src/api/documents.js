@@ -15,5 +15,14 @@ export const documentApi = {
   
   search: (query) => axios.get(API_BASE, { params: { search: query } }),
   
-  clearAll: () => axios.delete(`${API_BASE}/clear/all`)
+  clearAll: () => axios.delete(`${API_BASE}/clear/all`),
+  
+  convert: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return axios.post(`${API_BASE}/convert`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000
+    })
+  }
 }

@@ -2009,8 +2009,9 @@ onMounted(() => {
 }
 
 .messages-center {
-  max-width: 800px;
-  width: 100%;
+  width: 80%;
+  min-width: 600px;
+  max-width: 900px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -2193,15 +2194,18 @@ onMounted(() => {
   padding: 10px;
   border-radius: 12px;
   border: 1px solid var(--border-color);
-  width: 800px;
+  width: 80%;
+  min-width: 600px;
+  max-width: 900px;
   margin: 10px auto;
   box-sizing: border-box;
   box-shadow: 0 4px 8px rgba(102, 126, 234, 0.15);
 }
 
 .input-area-center {
-  max-width: 800px;
-  width: 100%;
+  width: 80%;
+  min-width: 600px;
+  max-width: 900px;
   margin: 0 auto;
 }
 
@@ -2522,9 +2526,10 @@ onMounted(() => {
 
 @media (max-width: 1024px) {
   .messages-center,
+  .input-area,
   .input-area-center {
-    max-width: 100%;
-    padding: 0 8px;
+    width: 90%;
+    min-width: unset;
   }
   
   .chat-container {
@@ -2557,6 +2562,14 @@ onMounted(() => {
 @media (max-width: 640px) {
   .sidebar {
     display: none;
+  }
+  
+  .messages-center,
+  .input-area,
+  .input-area-center {
+    width: 100%;
+    min-width: unset;
+    max-width: 100%;
   }
   
   .chat-header {

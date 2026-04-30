@@ -19,12 +19,12 @@
         />
         <n-button @click="triggerFileUpload" :loading="uploading" :disabled="isAiWorking">
           <template #icon><n-icon><CloudUploadOutline /></n-icon></template>
-          导入MD文件
+          导入文档
         </n-button>
         <input
           ref="fileInputRef"
           type="file"
-          accept=".md,.markdown"
+          accept=".pdf,.docx,.xlsx,.xls,.html,.htm,.csv,.json,.xml,.md,.markdown"
           multiple
           style="display: none"
           @change="handleFileUpload"
@@ -75,7 +75,7 @@
               :current-folder-id="currentFolderId"
               :expanded-folders="expandedFolders"
               :disabled="isAiWorking"
-              @select="isAiWorking ? null : selectFolder"
+              @select="handleFolderSelect"
               @edit="editFolder"
               @delete="deleteFolder"
               @toggle-expand="toggleFolderExpand"
@@ -307,6 +307,38 @@
         <n-button type="primary" @click="saveFolder" :loading="savingFolder">确定</n-button>
       </template>
     </n-modal>
+
+    <n-modal v-model:show="showImportPreview" preset="card" title="预览导入文档" style="width: 800px; max-width: 90vw;">
+      <div class="import-preview-content">
+        <n-input
+          v-model:value="importPreviewData.title"
+          placeholder="文档标题"
+          size="large"
+          style="margin-bottom: 16px"
+        />
+        <div class="preview-label">内容预览：</div>
+        <div class="preview-scroll">
+          <MdPreview
+            :modelValue="importPreviewData.content"
+            :theme="editorTheme"
+            :previewTheme="previewTheme"
+            :codeTheme="codeTheme"
+            class="md-preview"
+          />
+        </div>
+        <div class="preview-meta-info">
+          <n-text depth="3">字数：{{ importPreviewData.content?.replace(/\s/g, '').length || 0 }} 字</n-text>
+        </div>
+      </div>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="cancelImportPreview">取消</n-button>
+          <n-button type="primary" @click="confirmImportPreview" :loading="importingPreview">
+            确认导入
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -360,6 +392,10 @@ const isRootDragOver = ref(false)
 const editorTheme = ref('light')
 const previewTheme = ref(localStorage.getItem('md-preview-theme') || 'github')
 const codeTheme = ref(localStorage.getItem('md-code-theme') || 'github')
+const showImportPreview = ref(false)
+const importPreviewData = ref({ title: '', content: '' })
+const importingPreview = ref(false)
+const pendingImportFiles = ref([])
 const showCatalog = ref(true)
 const previewId = 'doc-preview'
 const formattingDoc = ref(false)
@@ -557,6 +593,11 @@ const selectFolder = (id) => {
   currentFolderId.value = id ? Number(id) : id
 }
 
+const handleFolderSelect = (id) => {
+  if (isAiWorking.value) return
+  selectFolder(id)
+}
+
 const toggleFolderExpand = (id) => {
   const folderId = Number(id)
   if (expandedFolders.value.has(folderId)) {
@@ -645,49 +686,107 @@ const handleFileUpload = async (e) => {
   const files = e.target.files
   if (!files || files.length === 0) return
 
-  uploading.value = true
-  let successCount = 0
-  let failCount = 0
-
-  for (const file of files) {
-    if (!file.name.match(/\.(md|markdown)$/i)) {
-      message.warning(`${file.name} 不是 Markdown 文件`)
-      failCount++
-      continue
-    }
-
+  const convertedFiles = []
+  
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    if (!file) continue
+    
     try {
-      const content = await readFileContent(file)
-      const title = extractTitle(content) || file.name.replace(/\.(md|markdown)$/i, '')
-      const wordCount = content.replace(/\s/g, '').length
-
-      const docData = {
+      uploading.value = true
+      const ext = file.name.split('.').pop().toLowerCase()
+      const isMarkdown = ['md', 'markdown'].includes(ext)
+      
+      let content, title
+      
+      if (isMarkdown) {
+        content = await readFileContent(file)
+        title = extractTitle(content) || file.name.replace(/\.(md|markdown)$/i, '')
+      } else {
+        const res = await documentApi.convert(file)
+        content = res.data.data.content
+        title = res.data.data.title || file.name.replace(/\.[^.]+$/, '')
+      }
+      
+      convertedFiles.push({
         title,
         content,
-        content_type: 'markdown',
-        folder_id: currentFolderId.value,
-        source_url: '',
-        is_favorite: 0,
-        word_count: wordCount
-      }
-
-      await documentApi.create(docData)
-      successCount++
+        originalName: file.name
+      })
     } catch (error) {
-      console.error(`导入 ${file.name} 失败:`, error)
-      failCount++
+      console.error(`转换 ${file.name} 失败:`, error)
+      const errorMsg = error.response?.data?.error || error.message || '未知错误'
+      message.error(`${file.name} 转换失败: ${errorMsg}`)
+    } finally {
+      uploading.value = false
     }
   }
 
-  uploading.value = false
   e.target.value = ''
+  
+  if (convertedFiles.length === 0) return
 
-  if (successCount > 0) {
-    message.success(`成功导入 ${successCount} 个文档`)
-    loadDocuments()
+  pendingImportFiles.value = convertedFiles
+  importPreviewData.value = {
+    title: convertedFiles[0].title,
+    content: convertedFiles[0].content,
+    index: 0
   }
-  if (failCount > 0) {
-    message.warning(`${failCount} 个文件导入失败`)
+  showImportPreview.value = true
+}
+
+const cancelImportPreview = () => {
+  showImportPreview.value = false
+  pendingImportFiles.value = []
+  importPreviewData.value = { title: '', content: '' }
+}
+
+const confirmImportPreview = async () => {
+  if (!importPreviewData.value.title) {
+    message.warning('请输入标题')
+    return
+  }
+
+  importingPreview.value = true
+  try {
+    const wordCount = importPreviewData.value.content?.replace(/\s/g, '').length || 0
+    
+    const docData = {
+      title: importPreviewData.value.title,
+      content: importPreviewData.value.content,
+      content_type: 'markdown',
+      folder_id: currentFolderId.value,
+      source_url: '',
+      is_favorite: 0,
+      word_count: wordCount
+    }
+
+    await documentApi.create(docData)
+    
+    const currentIndex = importPreviewData.value.index || 0
+    const remainingFiles = pendingImportFiles.value.slice(currentIndex + 1)
+    
+    if (remainingFiles.length > 0) {
+      pendingImportFiles.value = remainingFiles
+      importPreviewData.value = {
+        title: remainingFiles[0].title,
+        content: remainingFiles[0].content,
+        index: 0
+      }
+      message.success(`已导入，还剩 ${remainingFiles.length} 个文档待确认`)
+    } else {
+      showImportPreview.value = false
+      pendingImportFiles.value = []
+      importPreviewData.value = { title: '', content: '' }
+      message.success('文档导入成功')
+    }
+    
+    loadDocuments()
+  } catch (error) {
+    console.error('导入文档失败:', error)
+    message.error('导入文档失败')
+  } finally {
+    importingPreview.value = false
   }
 }
 
@@ -814,6 +913,23 @@ const formatDocument = async () => {
   const originalContent = currentDoc.value.content
   currentDoc.value.content = '正在整理中...\n'
   
+  const base64Images = []
+  const base64Regex = /!\[([^\]]*)\]\((data:image\/[^;]+;base64,[^)]+)\)/g
+  let match
+  while ((match = base64Regex.exec(originalContent)) !== null) {
+    base64Images.push({
+      placeholder: `__BASE64_IMAGE_${base64Images.length}__`,
+      original: match[0],
+      alt: match[1],
+      data: match[2]
+    })
+  }
+  
+  let processedContent = originalContent
+  base64Images.forEach((item) => {
+    processedContent = processedContent.replace(item.original, `![${item.alt}](${item.placeholder})`)
+  })
+  
   aiAbortController.value = new AbortController()
   
   try {
@@ -823,7 +939,7 @@ const formatDocument = async () => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        content: originalContent,
+        content: processedContent,
         title: currentDoc.value.title,
         stream: true
       }),
@@ -838,6 +954,17 @@ const formatDocument = async () => {
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let result = ''
+    
+    const restoreBase64Images = (text) => {
+      let restored = text
+      base64Images.forEach((item) => {
+        const escapedPlaceholder = item.placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const pattern = new RegExp(`!\\[([^\\]]*)\\]\\(${escapedPlaceholder}\\)`, 'g')
+        restored = restored.replace(pattern, `![$1](${item.data})`)
+        restored = restored.replace(new RegExp(escapedPlaceholder, 'g'), item.data)
+      })
+      return restored
+    }
     
     while (true) {
       const { done, value } = await reader.read()
@@ -855,8 +982,11 @@ const formatDocument = async () => {
             }
             if (data.content) {
               result += data.content
-              currentDoc.value.content = result
+              currentDoc.value.content = restoreBase64Images(result)
               scrollToEditorBottom()
+            }
+            if (data.done) {
+              currentDoc.value.content = restoreBase64Images(result)
             }
           } catch (e) {
             // ignore parse errors
@@ -864,6 +994,9 @@ const formatDocument = async () => {
         }
       }
     }
+    
+    result = restoreBase64Images(result)
+    currentDoc.value.content = result
     
     if (result) {
       message.success('文档整理完成')
@@ -1668,5 +1801,30 @@ onUnmounted(() => {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+.import-preview-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-label {
+  font-size: 13px;
+  color: var(--text-color-3);
+  margin-bottom: 8px;
+}
+
+.preview-scroll {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px;
+  background: var(--bg-color);
+}
+
+.preview-meta-info {
+  margin-top: 12px;
+  text-align: right;
 }
 </style>

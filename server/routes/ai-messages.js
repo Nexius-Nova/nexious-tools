@@ -3,6 +3,43 @@ import { query, queryOne, execute } from '../db.js'
 
 const router = express.Router()
 
+router.get('/all', async (req, res) => {
+  try {
+    const rows = await query('SELECT id, conversation_id, role, content, refs, images, title, created_at FROM ai_messages ORDER BY created_at ASC')
+    const messages = rows.map(row => {
+      let references = []
+      let images = []
+      if (row.refs) {
+        try {
+          references = typeof row.refs === 'string' ? JSON.parse(row.refs) : row.refs
+        } catch (e) {
+          references = []
+        }
+      }
+      if (row.images) {
+        try {
+          images = typeof row.images === 'string' ? JSON.parse(row.images) : row.images
+        } catch (e) {
+          images = []
+        }
+      }
+      return {
+        id: row.id,
+        conversation_id: row.conversation_id,
+        role: row.role,
+        content: row.content,
+        references,
+        images,
+        title: row.title,
+        created_at: row.created_at
+      }
+    })
+    res.json({ data: messages })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
 router.get('/conversations', async (req, res) => {
   try {
     const rows = await query(`
@@ -106,6 +143,15 @@ router.put('/conversations/:conversationId/title', async (req, res) => {
       }
     }
     
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.delete('/clear/all', async (req, res) => {
+  try {
+    await execute('DELETE FROM ai_messages')
     res.json({ success: true })
   } catch (error) {
     res.status(500).json({ error: error.message })
