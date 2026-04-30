@@ -1,105 +1,125 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, globalShortcut, screen } = require("electron")
-const path = require("path")
-const { spawn, exec } = require("child_process")
-const fs = require("fs")
-const os = require("os")
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  shell,
+  dialog,
+  globalShortcut,
+  screen
+} = require("electron");
+const path = require("path");
+const { spawn, exec } = require("child_process");
+const fs = require("fs");
+const os = require("os");
 
-const DEFAULT_GLOBAL_SHORTCUT = "CommandOrControl+Shift+Space"
-const SETTINGS_API_URL = "http://localhost:3000/api/settings/global_shortcut"
-const SETTINGS_FETCH_RETRY_COUNT = 10
-const SETTINGS_FETCH_RETRY_DELAY = 500
+const DEFAULT_GLOBAL_SHORTCUT = "CommandOrControl+Shift+Space";
+const SETTINGS_API_URL = "http://localhost:3000/api/settings/global_shortcut";
+const SETTINGS_FETCH_RETRY_COUNT = 10;
+const SETTINGS_FETCH_RETRY_DELAY = 500;
 
 const UNINSTALLER_KEYWORDS = [
-  'uninstall', 'uninstaller', 'unins', 'remove', 'remover',
-  '卸载', '卸载程序', '卸载工具', '移除', '删除程序'
-]
+  "uninstall",
+  "uninstaller",
+  "unins",
+  "remove",
+  "remover",
+  "卸载",
+  "卸载程序",
+  "卸载工具",
+  "移除",
+  "删除程序"
+];
 
 const UNINSTALLER_PATH_PATTERNS = [
   /unins\d{3}\.exe$/i,
   /uninstall\.exe$/i,
   /uninst\.exe$/i,
   /unins\d*\.exe$/i
-]
+];
 
 function isUninstaller(app) {
-  if (!app || !app.name) return false
-  
-  const appName = app.name.toLowerCase()
-  const appPath = (app.path || '').toLowerCase()
-  const exeName = path.basename(appPath)
-  
+  if (!app || !app.name) return false;
+
+  const appName = app.name.toLowerCase();
+  const appPath = (app.path || "").toLowerCase();
+  const exeName = path.basename(appPath);
+
   for (const keyword of UNINSTALLER_KEYWORDS) {
     if (appName.includes(keyword.toLowerCase())) {
-      return true
+      return true;
     }
   }
-  
+
   for (const pattern of UNINSTALLER_PATH_PATTERNS) {
     if (pattern.test(exeName)) {
-      return true
+      return true;
     }
   }
-  
-  if (appPath.includes('uninstall') || appPath.includes('unins')) {
-    const pathParts = appPath.split(/[/\\]/)
-    const secondLastPart = pathParts.length > 1 ? pathParts[pathParts.length - 2] : ''
-    if (secondLastPart.includes('uninstall') || secondLastPart.includes('unins')) {
-      return true
+
+  if (appPath.includes("uninstall") || appPath.includes("unins")) {
+    const pathParts = appPath.split(/[/\\]/);
+    const secondLastPart =
+      pathParts.length > 1 ? pathParts[pathParts.length - 2] : "";
+    if (
+      secondLastPart.includes("uninstall") ||
+      secondLastPart.includes("unins")
+    ) {
+      return true;
     }
   }
-  
-  return false
+
+  return false;
 }
 
-let iconExtractor
+let iconExtractor;
 try {
-  let iconExtractorPath
+  let iconExtractorPath;
   if (app.isPackaged) {
-    iconExtractorPath = path.join(process.resourcesPath, 'icon-extractor')
+    iconExtractorPath = path.join(process.resourcesPath, "icon-extractor");
   } else {
-    iconExtractorPath = 'icon-extractor'
+    iconExtractorPath = "icon-extractor";
   }
-  iconExtractor = require(iconExtractorPath)
+  iconExtractor = require(iconExtractorPath);
 } catch (e) {
-  console.error('Failed to load icon-extractor:', e.message)
-  iconExtractor = null
+  console.error("Failed to load icon-extractor:", e.message);
+  iconExtractor = null;
 }
 
-let mainWindow
-let serverProcess
-let currentShortcut = DEFAULT_GLOBAL_SHORTCUT
+let mainWindow;
+let serverProcess;
+let currentShortcut = DEFAULT_GLOBAL_SHORTCUT;
 const appScanCache = {
   expiresAt: 0,
   apps: []
-}
-const iconCache = new Map()
-const APP_SCAN_CACHE_TTL = 5 * 60 * 1000
-const ICON_BATCH_SIZE = 30
+};
+const iconCache = new Map();
+const APP_SCAN_CACHE_TTL = 5 * 60 * 1000;
+const ICON_BATCH_SIZE = 30;
 
 function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function toggleMainWindowVisibility() {
   if (!mainWindow) {
-    return
+    return;
   }
 
   if (mainWindow.isMinimized()) {
-    mainWindow.restore()
-    mainWindow.focus()
-    mainWindow.webContents.send("window-restored")
-    return
+    mainWindow.restore();
+    mainWindow.focus();
+    mainWindow.webContents.send("window-restored");
+    return;
   }
 
   if (mainWindow.isVisible()) {
-    mainWindow.minimize()
-    return
+    mainWindow.minimize();
+    return;
   }
 
-  mainWindow.show()
-  mainWindow.focus()
-  mainWindow.webContents.send("window-restored")
+  mainWindow.show();
+  mainWindow.focus();
+  mainWindow.webContents.send("window-restored");
 }
 
 function createWindow() {
@@ -115,62 +135,65 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, "preload.js")
     }
-  })
+  });
 
   if (process.env.NODE_ENV === "development" || !app.isPackaged) {
-    mainWindow.loadURL("http://localhost:5173")
-    mainWindow.webContents.openDevTools()
+    mainWindow.loadURL("http://localhost:5173");
+    mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, "../dist/index.html"))
+    mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
   }
 
   mainWindow.on("closed", () => {
-    mainWindow = null
-  })
+    mainWindow = null;
+  });
 
   mainWindow.on("blur", () => {
-    const bounds = mainWindow.getBounds()
+    const bounds = mainWindow.getBounds();
     if (bounds.width < 900) {
-      mainWindow?.minimize()
+      mainWindow?.minimize();
     }
-  })
-  
+  });
+
   mainWindow.once("ready-to-show", () => {
-    registerGlobalShortcut(currentShortcut)
-  })
+    registerGlobalShortcut(currentShortcut);
+  });
 }
 
 function registerGlobalShortcut(accelerator) {
   if (!accelerator) {
-    return false
+    return false;
   }
 
-  const nextShortcut = accelerator.trim()
-  const previousShortcut = currentShortcut
+  const nextShortcut = accelerator.trim();
+  const previousShortcut = currentShortcut;
   const hadPreviousShortcut =
-    Boolean(previousShortcut) && globalShortcut.isRegistered(previousShortcut)
+    Boolean(previousShortcut) && globalShortcut.isRegistered(previousShortcut);
 
   try {
     if (hadPreviousShortcut && previousShortcut === nextShortcut) {
-      currentShortcut = nextShortcut
-      return true
+      currentShortcut = nextShortcut;
+      return true;
     }
 
     if (hadPreviousShortcut) {
-      globalShortcut.unregister(previousShortcut)
+      globalShortcut.unregister(previousShortcut);
     }
 
-    const result = globalShortcut.register(nextShortcut, toggleMainWindowVisibility)
+    const result = globalShortcut.register(
+      nextShortcut,
+      toggleMainWindowVisibility
+    );
 
     if (result) {
-      currentShortcut = nextShortcut
-      return true
+      currentShortcut = nextShortcut;
+      return true;
     }
 
     if (hadPreviousShortcut) {
-      globalShortcut.register(previousShortcut, toggleMainWindowVisibility)
+      globalShortcut.register(previousShortcut, toggleMainWindowVisibility);
     }
-    return false
+    return false;
   } catch (e) {
     if (
       hadPreviousShortcut &&
@@ -178,175 +201,177 @@ function registerGlobalShortcut(accelerator) {
       !globalShortcut.isRegistered(previousShortcut)
     ) {
       try {
-        globalShortcut.register(previousShortcut, toggleMainWindowVisibility)
+        globalShortcut.register(previousShortcut, toggleMainWindowVisibility);
       } catch (restoreError) {
-        console.error("恢复旧快捷键失败:", restoreError)
+        console.error("恢复旧快捷键失败:", restoreError);
       }
     }
-    console.error("注册快捷键失败:", e)
-    return false
+    console.error("注册快捷键失败:", e);
+    return false;
   }
 }
 
 async function loadSavedGlobalShortcut() {
   for (let attempt = 0; attempt < SETTINGS_FETCH_RETRY_COUNT; attempt += 1) {
     try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 2000)
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
       const response = await fetch(SETTINGS_API_URL, {
         signal: controller.signal
-      })
-      clearTimeout(timeout)
+      });
+      clearTimeout(timeout);
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
+        throw new Error(`HTTP ${response.status}`);
       }
 
-      const payload = await response.json()
-      const savedShortcut = payload?.data
+      const payload = await response.json();
+      const savedShortcut = payload?.data;
 
       if (!savedShortcut || savedShortcut === currentShortcut) {
-        return
+        return;
       }
 
-      const result = registerGlobalShortcut(savedShortcut)
+      const result = registerGlobalShortcut(savedShortcut);
       if (!result) {
-        console.error("已保存的快捷键注册失败，保留当前快捷键:", savedShortcut)
+        console.error("已保存的快捷键注册失败，保留当前快捷键:", savedShortcut);
       }
-      return
+      return;
     } catch (error) {
       if (attempt === SETTINGS_FETCH_RETRY_COUNT - 1) {
-        console.error("加载已保存快捷键失败:", error.message)
-        return
+        console.error("加载已保存快捷键失败:", error.message);
+        return;
       }
-      await delay(SETTINGS_FETCH_RETRY_DELAY)
+      await delay(SETTINGS_FETCH_RETRY_DELAY);
     }
   }
 }
 
 function startServer() {
   if (!app.isPackaged) {
-    return
+    return;
   }
   const serverPath = app.isPackaged
     ? path.join(process.resourcesPath, "dist-server/server.cjs")
-    : path.join(__dirname, "../server/index.js")
+    : path.join(__dirname, "../server/index.js");
 
-  const nodePath = process.execPath
-  
+  const nodePath = process.execPath;
+
   serverProcess = spawn(nodePath, [serverPath], {
     stdio: "pipe",
     windowsHide: true,
     env: {
       ...process.env,
       NODE_ENV: app.isPackaged ? "production" : "development",
-      RESOURCES_PATH: app.isPackaged ? process.resourcesPath : path.join(__dirname, ".."),
+      RESOURCES_PATH: app.isPackaged
+        ? process.resourcesPath
+        : path.join(__dirname, ".."),
       APP_DATA_DIR: app.getPath("userData"),
       ELECTRON_RUN_AS_NODE: "1"
     }
-  })
-  
-  serverProcess.stdout.on('data', (data) => {
-    console.log(`[Server] ${data}`)
-  })
-  serverProcess.stderr.on('data', (data) => {
-    console.error(`[Server Error] ${data}`)
-  })
+  });
+
+  serverProcess.stdout.on("data", (data) => {
+    console.log(`[Server] ${data}`);
+  });
+  serverProcess.stderr.on("data", (data) => {
+    console.error(`[Server Error] ${data}`);
+  });
 }
 
 app.whenReady().then(() => {
-  startServer()
-  createWindow()
-  loadSavedGlobalShortcut()
-  
-  app.focus()
-})
+  startServer();
+  createWindow();
+  loadSavedGlobalShortcut();
+
+  app.focus();
+});
 
 app.on("browser-window-focus", () => {
   if (!globalShortcut.isRegistered(currentShortcut)) {
-    registerGlobalShortcut(currentShortcut)
+    registerGlobalShortcut(currentShortcut);
   }
-})
+});
 
 app.on("window-all-closed", () => {
   if (serverProcess) {
-    serverProcess.kill()
+    serverProcess.kill();
   }
-  globalShortcut.unregisterAll()
+  globalShortcut.unregisterAll();
   if (process.platform !== "darwin") {
-    app.quit()
+    app.quit();
   }
-})
+});
 
 app.on("will-quit", () => {
-  globalShortcut.unregisterAll()
-})
+  globalShortcut.unregisterAll();
+});
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow()
+    createWindow();
   }
-})
+});
 
 ipcMain.on("window-minimize", () => {
-  mainWindow?.minimize()
-})
+  mainWindow?.minimize();
+});
 
 ipcMain.on("window-maximize", () => {
   if (mainWindow?.isMaximized()) {
-    mainWindow.unmaximize()
+    mainWindow.unmaximize();
   } else {
-    mainWindow?.maximize()
+    mainWindow?.maximize();
   }
-})
+});
 
 ipcMain.on("window-close", () => {
-  mainWindow?.close()
-})
+  mainWindow?.close();
+});
 
 ipcMain.on("open-external", (event, url) => {
-  shell.openExternal(url)
-})
+  shell.openExternal(url);
+});
 
 ipcMain.on("expand-window", () => {
   if (mainWindow) {
-    mainWindow.setAlwaysOnTop(false)
-    mainWindow.setResizable(true)
-    mainWindow.setMinimumSize(900, 600)
-    mainWindow.setMaximumSize(9999, 9999)
-    mainWindow.setSize(1200, 800)
-    mainWindow.center()
+    mainWindow.setAlwaysOnTop(false);
+    mainWindow.setResizable(true);
+    mainWindow.setMinimumSize(900, 600);
+    mainWindow.setMaximumSize(9999, 9999);
+    mainWindow.setSize(1200, 800);
+    mainWindow.center();
   }
-})
+});
 
 ipcMain.on("shrink-window", () => {
   if (mainWindow) {
     if (mainWindow.isMaximized()) {
-      mainWindow.unmaximize()
+      mainWindow.unmaximize();
     }
-    mainWindow.setAlwaysOnTop(true)
-    mainWindow.setResizable(false)
-    mainWindow.setMinimumSize(600, 60)
-    mainWindow.setMaximumSize(600, 700)
-    mainWindow.setSize(600, 60)
-    mainWindow.center()
+    mainWindow.setAlwaysOnTop(true);
+    mainWindow.setResizable(false);
+    mainWindow.setMinimumSize(600, 60);
+    mainWindow.setMaximumSize(600, 700);
+    mainWindow.setSize(600, 60);
+    mainWindow.center();
   }
-})
+});
 
 ipcMain.on("resize-search-window", (event, height) => {
   if (mainWindow) {
-    const newHeight = Math.min(Math.max(height, 60), 700)
-    mainWindow.setContentSize(600, newHeight)
+    const newHeight = Math.min(Math.max(height, 60), 700);
+    mainWindow.setContentSize(600, newHeight);
   }
-})
+});
 
 ipcMain.on("open-app", (event, appPath) => {
   if (appPath && fs.existsSync(appPath)) {
-    shell.openPath(appPath)
+    shell.openPath(appPath);
   } else {
-    shell.openExternal(appPath)
+    shell.openExternal(appPath);
   }
-})
+});
 
 ipcMain.handle("select-file", async () => {
   const result = await dialog.showOpenDialog({
@@ -355,83 +380,97 @@ ipcMain.handle("select-file", async () => {
       { name: "Applications", extensions: ["exe", "app", "lnk"] },
       { name: "All Files", extensions: ["*"] }
     ]
-  })
-  return result.filePaths[0] || null
-})
+  });
+  return result.filePaths[0] || null;
+});
 
 ipcMain.handle("get-exe-icon", async (event, iconPath) => {
   try {
     if (!iconPath) {
-      return null
+      return null;
     }
-    
+
     if (process.platform !== "win32") {
-      return null
+      return null;
     }
-    
-    const iconBase64 = await getCachedIcon(iconPath)
-    return iconBase64
+
+    const iconBase64 = await getCachedIcon(iconPath);
+    return iconBase64;
   } catch (error) {
-    console.error("提取图标失败:", error)
-    return null
+    console.error("提取图标失败:", error);
+    return null;
   }
-})
+});
 
 ipcMain.handle("get-app-icons", async (event, appPaths = []) => {
   try {
-    if (process.platform !== "win32" || !Array.isArray(appPaths) || appPaths.length === 0) {
-      return {}
+    if (
+      process.platform !== "win32" ||
+      !Array.isArray(appPaths) ||
+      appPaths.length === 0
+    ) {
+      return {};
     }
 
-    const uniquePaths = [...new Set(appPaths.filter(Boolean))]
-    const icons = await mapWithConcurrency(uniquePaths, ICON_BATCH_SIZE, async (appPath) => {
-      const icon = await getCachedIcon(appPath)
-      return [appPath, icon || ""]
-    })
+    const uniquePaths = [...new Set(appPaths.filter(Boolean))];
+    const icons = await mapWithConcurrency(
+      uniquePaths,
+      ICON_BATCH_SIZE,
+      async (appPath) => {
+        const icon = await getCachedIcon(appPath);
+        return [appPath, icon || ""];
+      }
+    );
 
-    return Object.fromEntries(icons)
+    return Object.fromEntries(icons);
   } catch (error) {
-    console.error("鎵归噺鎻愬彇鍥炬爣澶辫触:", error)
-    return {}
+    console.error("获取应用图标失败:", error);
+    return {};
   }
-})
+});
 
 async function extractIcon(iconPath) {
   return new Promise((resolve) => {
     if (!iconPath || typeof iconPath !== "string") {
-      resolve(null)
-      return
+      resolve(null);
+      return;
     }
-    
-    let cleanPath = iconPath.trim()
+
+    let cleanPath = iconPath.trim();
     if (cleanPath.includes(",")) {
-      cleanPath = cleanPath.split(",")[0].trim()
+      cleanPath = cleanPath.split(",")[0].trim();
     }
-    cleanPath = cleanPath.replace(/^["']|["']$/g, "")
-    
+    cleanPath = cleanPath.replace(/^["']|["']$/g, "");
+
     if (!cleanPath || !fs.existsSync(cleanPath)) {
-      resolve(null)
-      return
+      resolve(null);
+      return;
     }
-    
-    const ext = path.extname(cleanPath).toLowerCase()
-    
-    if (ext === ".ico" || ext === ".png" || ext === ".jpg" || ext === ".jpeg" || ext === ".bmp") {
+
+    const ext = path.extname(cleanPath).toLowerCase();
+
+    if (
+      ext === ".ico" ||
+      ext === ".png" ||
+      ext === ".jpg" ||
+      ext === ".jpeg" ||
+      ext === ".bmp"
+    ) {
       try {
-        const imageBuffer = fs.readFileSync(cleanPath)
-        const base64 = `data:image/${ext === ".jpg" ? "jpeg" : ext.slice(1)};base64,${imageBuffer.toString("base64")}`
-        resolve(base64)
-        return
+        const imageBuffer = fs.readFileSync(cleanPath);
+        const base64 = `data:image/${ext === ".jpg" ? "jpeg" : ext.slice(1)};base64,${imageBuffer.toString("base64")}`;
+        resolve(base64);
+        return;
       } catch (e) {
-        resolve(null)
-        return
+        resolve(null);
+        return;
       }
     }
-    
-    const tempDir = os.tmpdir()
-    const iconName = `icon_${Date.now()}_${Math.random().toString(36).slice(2)}.png`
-    const tempIconPath = path.join(tempDir, iconName)
-    
+
+    const tempDir = os.tmpdir();
+    const iconName = `icon_${Date.now()}_${Math.random().toString(36).slice(2)}.png`;
+    const tempIconPath = path.join(tempDir, iconName);
+
     const psScript = `
       Add-Type -AssemblyName System.Drawing
       try {
@@ -446,315 +485,344 @@ async function extractIcon(iconPath) {
       } catch {
         Write-Output "error"
       }
-    `
-    
-    const child = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", psScript], {
-      stdio: "pipe",
-      windowsHide: true
-    })
-    
-    let output = ""
+    `;
+
+    const child = spawn(
+      "powershell",
+      ["-NoProfile", "-NonInteractive", "-Command", psScript],
+      {
+        stdio: "pipe",
+        windowsHide: true
+      }
+    );
+
+    let output = "";
     child.stdout.on("data", (data) => {
-      output += data.toString()
-    })
-    
+      output += data.toString();
+    });
+
     const timeout = setTimeout(() => {
-      child.kill()
-      resolve(null)
-    }, 2000)
-    
+      child.kill();
+      resolve(null);
+    }, 2000);
+
     child.on("close", (code) => {
-      clearTimeout(timeout)
+      clearTimeout(timeout);
       if (output.includes("success") && fs.existsSync(tempIconPath)) {
         try {
-          const imageBuffer = fs.readFileSync(tempIconPath)
-          const base64 = `data:image/png;base64,${imageBuffer.toString("base64")}`
-          fs.unlinkSync(tempIconPath)
-          resolve(base64)
+          const imageBuffer = fs.readFileSync(tempIconPath);
+          const base64 = `data:image/png;base64,${imageBuffer.toString("base64")}`;
+          fs.unlinkSync(tempIconPath);
+          resolve(base64);
         } catch (e) {
-          resolve(null)
+          resolve(null);
         }
       } else {
-        resolve(null)
+        resolve(null);
       }
-    })
-    
+    });
+
     child.on("error", () => {
-      clearTimeout(timeout)
-      resolve(null)
-    })
-  })
+      clearTimeout(timeout);
+      resolve(null);
+    });
+  });
 }
 
 async function getCachedIcon(iconPath) {
   if (!iconPath || typeof iconPath !== "string") {
-    return null
+    return null;
   }
 
-  let cleanPath = iconPath.trim()
+  let cleanPath = iconPath.trim();
   if (cleanPath.includes(",")) {
-    cleanPath = cleanPath.split(",")[0].trim()
+    cleanPath = cleanPath.split(",")[0].trim();
   }
-  cleanPath = cleanPath.replace(/^["']|["']$/g, "")
+  cleanPath = cleanPath.replace(/^["']|["']$/g, "");
 
   if (!cleanPath) {
-    return null
+    return null;
   }
 
   if (iconCache.has(cleanPath)) {
-    return iconCache.get(cleanPath)
+    return iconCache.get(cleanPath);
   }
 
-  const iconBase64 = await extractIconWithExtractor(cleanPath) || await extractIcon(cleanPath) || null
-  iconCache.set(cleanPath, iconBase64)
-  return iconBase64
+  const iconBase64 =
+    (await extractIconWithExtractor(cleanPath)) ||
+    (await extractIcon(cleanPath)) ||
+    null;
+  iconCache.set(cleanPath, iconBase64);
+  return iconBase64;
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {
-  const results = new Array(items.length)
-  let currentIndex = 0
+  const results = new Array(items.length);
+  let currentIndex = 0;
 
   async function worker() {
     while (currentIndex < items.length) {
-      const index = currentIndex++
-      results[index] = await mapper(items[index], index)
+      const index = currentIndex++;
+      results[index] = await mapper(items[index], index);
     }
   }
 
-  const workerCount = Math.min(concurrency, items.length)
-  await Promise.all(Array.from({ length: workerCount }, () => worker()))
-  return results
+  const workerCount = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
 }
 
 async function extractIconsBatch(apps) {
-  const appsWithIcons = []
-  const iconCache = new Map()
-  
+  const appsWithIcons = [];
+  const iconCache = new Map();
+
   for (const app of apps) {
-    let iconBase64 = ""
-    
+    let iconBase64 = "";
+
     if (app.iconPath) {
       if (iconCache.has(app.iconPath)) {
-        iconBase64 = iconCache.get(app.iconPath)
+        iconBase64 = iconCache.get(app.iconPath);
       } else {
-        iconBase64 = await extractIcon(app.iconPath)
+        iconBase64 = await extractIcon(app.iconPath);
         if (iconBase64) {
-          iconCache.set(app.iconPath, iconBase64)
+          iconCache.set(app.iconPath, iconBase64);
         }
       }
     }
-    
+
     if (!iconBase64 && app.path) {
-      const exePath = app.path.endsWith(".exe") ? app.path : null
+      const exePath = app.path.endsWith(".exe") ? app.path : null;
       if (exePath && fs.existsSync(exePath)) {
         if (iconCache.has(exePath)) {
-          iconBase64 = iconCache.get(exePath)
+          iconBase64 = iconCache.get(exePath);
         } else {
-          iconBase64 = await extractIcon(exePath)
+          iconBase64 = await extractIcon(exePath);
           if (iconBase64) {
-            iconCache.set(exePath, iconBase64)
+            iconCache.set(exePath, iconBase64);
           }
         }
       }
     }
-    
+
     appsWithIcons.push({
       ...app,
       icon: iconBase64 || app.icon || ""
-    })
+    });
   }
-  
-  return appsWithIcons
+
+  return appsWithIcons;
 }
 
 function extractIconWithExtractor(iconPath) {
   return new Promise((resolve) => {
     if (!iconExtractor) {
-      resolve(null)
-      return
+      resolve(null);
+      return;
     }
-    
+
     if (!iconPath || typeof iconPath !== "string") {
-      resolve(null)
-      return
+      resolve(null);
+      return;
     }
-    
-    let cleanPath = iconPath.trim()
+
+    let cleanPath = iconPath.trim();
     if (cleanPath.includes(",")) {
-      cleanPath = cleanPath.split(",")[0].trim()
+      cleanPath = cleanPath.split(",")[0].trim();
     }
-    cleanPath = cleanPath.replace(/^["']|["']$/g, "")
-    
+    cleanPath = cleanPath.replace(/^["']|["']$/g, "");
+
     if (!cleanPath || !fs.existsSync(cleanPath)) {
-      resolve(null)
-      return
+      resolve(null);
+      return;
     }
-    
+
     const timeout = setTimeout(() => {
-      iconExtractor.emitter.removeListener("icon", handler)
-      iconExtractor.emitter.removeListener("error", errorHandler)
-      resolve(null)
-    }, 1000)
-    
+      iconExtractor.emitter.removeListener("icon", handler);
+      iconExtractor.emitter.removeListener("error", errorHandler);
+      resolve(null);
+    }, 1000);
+
     const handler = (data) => {
       if (data.Context === cleanPath) {
-        clearTimeout(timeout)
-        iconExtractor.emitter.removeListener("icon", handler)
-        iconExtractor.emitter.removeListener("error", errorHandler)
+        clearTimeout(timeout);
+        iconExtractor.emitter.removeListener("icon", handler);
+        iconExtractor.emitter.removeListener("error", errorHandler);
         if (data.Base64ImageData) {
-          resolve(`data:image/png;base64,${data.Base64ImageData}`)
+          resolve(`data:image/png;base64,${data.Base64ImageData}`);
         } else {
-          resolve(null)
+          resolve(null);
         }
       }
-    }
-    
+    };
+
     const errorHandler = (err) => {
-      clearTimeout(timeout)
-      iconExtractor.emitter.removeListener("icon", handler)
-      iconExtractor.emitter.removeListener("error", errorHandler)
-      resolve(null)
-    }
-    
-    iconExtractor.emitter.on("icon", handler)
-    iconExtractor.emitter.on("error", errorHandler)
-    iconExtractor.getIcon(cleanPath, cleanPath)
-  })
+      clearTimeout(timeout);
+      iconExtractor.emitter.removeListener("icon", handler);
+      iconExtractor.emitter.removeListener("error", errorHandler);
+      resolve(null);
+    };
+
+    iconExtractor.emitter.on("icon", handler);
+    iconExtractor.emitter.on("error", errorHandler);
+    iconExtractor.getIcon(cleanPath, cleanPath);
+  });
 }
 
 ipcMain.handle("auto-import-apps", async () => {
-  const now = Date.now()
+  const now = Date.now();
   if (appScanCache.expiresAt > now && appScanCache.apps.length > 0) {
-    return appScanCache.apps
+    return appScanCache.apps;
   }
 
-  const apps = []
-  const seenPaths = new Set()
-  const seenNames = new Set()
-  
+  const apps = [];
+  const seenPaths = new Set();
+  const seenNames = new Set();
+
   if (process.platform === "win32") {
     const [desktopApps, startMenuApps, registryApps] = await Promise.all([
       getDesktopShortcuts(),
       getStartMenuShortcuts(),
       getRegistryApps()
-    ])
+    ]);
 
     for (const app of desktopApps) {
-      const normalPath = app.path.toLowerCase()
-      if (!seenPaths.has(normalPath) && !seenNames.has(app.name.toLowerCase())) {
-        seenPaths.add(normalPath)
-        seenNames.add(app.name.toLowerCase())
-        apps.push({ ...app, source: "desktop" })
+      const normalPath = app.path.toLowerCase();
+      if (
+        !seenPaths.has(normalPath) &&
+        !seenNames.has(app.name.toLowerCase())
+      ) {
+        seenPaths.add(normalPath);
+        seenNames.add(app.name.toLowerCase());
+        apps.push({ ...app, source: "desktop" });
       }
     }
 
     for (const app of startMenuApps) {
-      const normalPath = app.path.toLowerCase()
-      if (!seenPaths.has(normalPath) && !seenNames.has(app.name.toLowerCase())) {
-        seenPaths.add(normalPath)
-        seenNames.add(app.name.toLowerCase())
-        apps.push({ ...app, source: "startmenu" })
+      const normalPath = app.path.toLowerCase();
+      if (
+        !seenPaths.has(normalPath) &&
+        !seenNames.has(app.name.toLowerCase())
+      ) {
+        seenPaths.add(normalPath);
+        seenNames.add(app.name.toLowerCase());
+        apps.push({ ...app, source: "startmenu" });
       }
     }
 
     for (const app of registryApps) {
-      const normalPath = app.path.toLowerCase()
-      if (!seenPaths.has(normalPath) && !seenNames.has(app.name.toLowerCase())) {
-        seenPaths.add(normalPath)
-        seenNames.add(app.name.toLowerCase())
-        apps.push({ ...app, source: "registry" })
+      const normalPath = app.path.toLowerCase();
+      if (
+        !seenPaths.has(normalPath) &&
+        !seenNames.has(app.name.toLowerCase())
+      ) {
+        seenPaths.add(normalPath);
+        seenNames.add(app.name.toLowerCase());
+        apps.push({ ...app, source: "registry" });
       }
     }
   }
 
-  const filteredApps = apps.filter(app => !isUninstaller(app))
-  
-  appScanCache.apps = filteredApps
-  appScanCache.expiresAt = now + APP_SCAN_CACHE_TTL
-  return filteredApps
-})
+  const filteredApps = apps.filter((app) => !isUninstaller(app));
+
+  appScanCache.apps = filteredApps;
+  appScanCache.expiresAt = now + APP_SCAN_CACHE_TTL;
+  return filteredApps;
+});
 
 async function parseLnkDirectory(dirPath) {
-  const shortcuts = []
-  if (!fs.existsSync(dirPath)) return shortcuts
+  const shortcuts = [];
+  if (!fs.existsSync(dirPath)) return shortcuts;
 
-  let files
+  let files;
   try {
-    files = fs.readdirSync(dirPath)
+    files = fs.readdirSync(dirPath);
   } catch (e) {
-    return shortcuts
+    return shortcuts;
   }
 
-  const lnkFiles = []
+  const lnkFiles = [];
   for (const file of files) {
-    const fullPath = path.join(dirPath, file)
+    const fullPath = path.join(dirPath, file);
 
-    let stat
+    let stat;
     try {
-      stat = fs.statSync(fullPath)
+      stat = fs.statSync(fullPath);
     } catch (e) {
-      continue
+      continue;
     }
 
     if (stat.isDirectory()) {
-      const subShortcuts = await parseLnkDirectory(fullPath)
-      shortcuts.push(...subShortcuts)
-      continue
+      const subShortcuts = await parseLnkDirectory(fullPath);
+      shortcuts.push(...subShortcuts);
+      continue;
     }
 
     if (file.endsWith(".lnk")) {
-      lnkFiles.push({ file, fullPath })
+      lnkFiles.push({ file, fullPath });
     }
   }
 
   const lnkPromises = lnkFiles.map(async ({ file, fullPath }) => {
     try {
-      const shortcutDetails = shell.readShortcutLink(fullPath)
-      const realPath = shortcutDetails.target
+      const shortcutDetails = shell.readShortcutLink(fullPath);
+      const realPath = shortcutDetails.target;
 
-      if (!realPath || !fs.existsSync(realPath)) return null
-      if (!realPath.toLowerCase().endsWith(".exe")) return null
+      if (!realPath || !fs.existsSync(realPath)) return null;
+      if (!realPath.toLowerCase().endsWith(".exe")) return null;
 
       return {
         name: file.replace(".lnk", ""),
         path: realPath,
         icon: ""
-      }
+      };
     } catch (e) {
-      return null
+      return null;
     }
-  })
+  });
 
-  const lnkResults = (await Promise.all(lnkPromises)).filter(Boolean)
-  shortcuts.push(...lnkResults)
+  const lnkResults = (await Promise.all(lnkPromises)).filter(Boolean);
+  shortcuts.push(...lnkResults);
 
-  return shortcuts.filter(app => !isUninstaller(app))
+  return shortcuts.filter((app) => !isUninstaller(app));
 }
 
 async function getDesktopShortcuts() {
-  const desktopDir = app.getPath("desktop")
-  return parseLnkDirectory(desktopDir)
+  const desktopDir = app.getPath("desktop");
+  return parseLnkDirectory(desktopDir);
 }
 
 async function getStartMenuShortcuts() {
-  const shortcuts = []
+  const shortcuts = [];
   const startMenuDirs = [
-    path.join(process.env.APPDATA || "", "Microsoft", "Windows", "Start Menu", "Programs"),
-    path.join("C:", "ProgramData", "Microsoft", "Windows", "Start Menu", "Programs")
-  ]
+    path.join(
+      process.env.APPDATA || "",
+      "Microsoft",
+      "Windows",
+      "Start Menu",
+      "Programs"
+    ),
+    path.join(
+      "C:",
+      "ProgramData",
+      "Microsoft",
+      "Windows",
+      "Start Menu",
+      "Programs"
+    )
+  ];
 
   for (const dir of startMenuDirs) {
-    const apps = await parseLnkDirectory(dir)
-    shortcuts.push(...apps)
+    const apps = await parseLnkDirectory(dir);
+    shortcuts.push(...apps);
   }
 
-  return shortcuts
+  return shortcuts;
 }
 
 async function getRegistryApps() {
-  const apps = []
-  const seenNames = new Set()
-  
+  const apps = [];
+  const seenNames = new Set();
+
   const psScript = `
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
     $ErrorActionPreference = 'SilentlyContinue'
@@ -781,138 +849,169 @@ async function getRegistryApps() {
       }
     }
     $results | ConvertTo-Json -Depth 2 -Compress
-  `
-  
+  `;
+
   return new Promise((resolve) => {
-    const proc = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", psScript], {
-      stdio: "pipe",
-      windowsHide: true,
-      env: { ...process.env, POWERSHELL_TELEMETRY_OPTOUT: "1" }
-    })
-    
-    let stdout = ""
+    const proc = spawn(
+      "powershell",
+      ["-NoProfile", "-NonInteractive", "-Command", psScript],
+      {
+        stdio: "pipe",
+        windowsHide: true,
+        env: { ...process.env, POWERSHELL_TELEMETRY_OPTOUT: "1" }
+      }
+    );
+
+    let stdout = "";
     let timeout = setTimeout(() => {
-      proc.kill()
-      resolve(apps)
-    }, 15000)
-    
+      proc.kill();
+      resolve(apps);
+    }, 15000);
+
     proc.stdout.on("data", (data) => {
-      stdout += data.toString("utf8")
-    })
-    
+      stdout += data.toString("utf8");
+    });
+
     proc.on("close", () => {
-      clearTimeout(timeout)
+      clearTimeout(timeout);
       try {
-        let items = []
+        let items = [];
         if (stdout.trim()) {
-          const parsed = JSON.parse(stdout)
-          items = Array.isArray(parsed) ? parsed : [parsed]
+          const parsed = JSON.parse(stdout);
+          items = Array.isArray(parsed) ? parsed : [parsed];
         }
-        
+
         for (const item of items) {
           try {
-            const displayName = item.DisplayName
-            if (!displayName || seenNames.has(displayName.toLowerCase())) continue
-            
-            const publisher = item.Publisher || ""
-            const systemComponent = item.SystemComponent
-            const releaseType = item.ReleaseType
-            const parentDisplayName = item.ParentDisplayName
-            
-            if (systemComponent === 1 || releaseType || parentDisplayName) continue
-            if (publisher && /microsoft|windows|update|patch|security/i.test(publisher) && /update|patch|security|framework|runtime/i.test(displayName)) continue
-            
-            let exePath = ""
-            const displayIcon = item.DisplayIcon
+            const displayName = item.DisplayName;
+            if (!displayName || seenNames.has(displayName.toLowerCase()))
+              continue;
+
+            const publisher = item.Publisher || "";
+            const systemComponent = item.SystemComponent;
+            const releaseType = item.ReleaseType;
+            const parentDisplayName = item.ParentDisplayName;
+
+            if (systemComponent === 1 || releaseType || parentDisplayName)
+              continue;
+            if (
+              publisher &&
+              /microsoft|windows|update|patch|security/i.test(publisher) &&
+              /update|patch|security|framework|runtime/i.test(displayName)
+            )
+              continue;
+
+            let exePath = "";
+            const displayIcon = item.DisplayIcon;
             if (displayIcon) {
-              const iconPath = displayIcon.split(",")[0].trim().replace(/^["']|["']$/g, "")
+              const iconPath = displayIcon
+                .split(",")[0]
+                .trim()
+                .replace(/^["']|["']$/g, "");
               if (iconPath && fs.existsSync(iconPath)) {
-                exePath = iconPath
+                exePath = iconPath;
               }
             }
-            
-            const installLocation = item.InstallLocation
+
+            const installLocation = item.InstallLocation;
             if (!exePath && installLocation) {
-              const cleanInstall = installLocation.replace(/^["']|["']$/g, "")
+              const cleanInstall = installLocation.replace(/^["']|["']$/g, "");
               if (fs.existsSync(cleanInstall)) {
-                const exeFiles = findExeInDir(cleanInstall)
+                const exeFiles = findExeInDir(cleanInstall);
                 if (exeFiles.length > 0) {
-                  exePath = exeFiles[0]
+                  exePath = exeFiles[0];
                 }
               }
             }
-            
-            if (!exePath || !exePath.toLowerCase().endsWith(".exe") || !fs.existsSync(exePath)) continue
-            
-            seenNames.add(displayName.toLowerCase())
-            
+
+            if (
+              !exePath ||
+              !exePath.toLowerCase().endsWith(".exe") ||
+              !fs.existsSync(exePath)
+            )
+              continue;
+
+            seenNames.add(displayName.toLowerCase());
+
             const appData = {
               name: displayName,
               path: exePath,
               icon: "",
               version: item.DisplayVersion || "",
               publisher: publisher
-            }
-            
+            };
+
             if (!isUninstaller(appData)) {
-              apps.push(appData)
+              apps.push(appData);
             }
           } catch (e) {
             // ignore
           }
         }
       } catch (e) {
-        console.error("解析注册表数据失败:", e.message)
+        console.error("解析注册表数据失败:", e.message);
       }
-      resolve(apps)
-    })
-    
+      resolve(apps);
+    });
+
     proc.on("error", () => {
-      clearTimeout(timeout)
-      resolve(apps)
-    })
-  })
+      clearTimeout(timeout);
+      resolve(apps);
+    });
+  });
 }
 
 function findExeInDir(dirPath, maxDepth = 1) {
-  const results = []
+  const results = [];
   try {
-    _findExeRecursive(dirPath, results, 0, maxDepth)
+    _findExeRecursive(dirPath, results, 0, maxDepth);
   } catch (e) {
     // ignore
   }
-  return results
+  return results;
 }
 
 function _findExeRecursive(dirPath, results, depth, maxDepth) {
-  if (depth > maxDepth || results.length >= 1) return
-  let entries
+  if (depth > maxDepth || results.length >= 1) return;
+  let entries;
   try {
-    entries = fs.readdirSync(dirPath, { withFileTypes: true })
+    entries = fs.readdirSync(dirPath, { withFileTypes: true });
   } catch (e) {
-    return
+    return;
   }
   for (const entry of entries) {
-    if (results.length >= 1) return
+    if (results.length >= 1) return;
     if (entry.isFile() && entry.name.toLowerCase().endsWith(".exe")) {
-      const exeName = entry.name.toLowerCase()
-      const dirName = path.basename(dirPath).toLowerCase()
-      if (exeName.includes(dirName) || dirName.includes(exeName.replace(".exe", ""))) {
-        results.push(path.join(dirPath, entry.name))
+      const exeName = entry.name.toLowerCase();
+      const dirName = path.basename(dirPath).toLowerCase();
+      if (
+        exeName.includes(dirName) ||
+        dirName.includes(exeName.replace(".exe", ""))
+      ) {
+        results.push(path.join(dirPath, entry.name));
       }
-    } else if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name.toLowerCase() !== "uninstall") {
-      _findExeRecursive(path.join(dirPath, entry.name), results, depth + 1, maxDepth)
+    } else if (
+      entry.isDirectory() &&
+      !entry.name.startsWith(".") &&
+      entry.name.toLowerCase() !== "uninstall"
+    ) {
+      _findExeRecursive(
+        path.join(dirPath, entry.name),
+        results,
+        depth + 1,
+        maxDepth
+      );
     }
   }
 }
 
 ipcMain.handle("set-global-shortcut", (event, accelerator) => {
-  return registerGlobalShortcut(accelerator)
-})
+  return registerGlobalShortcut(accelerator);
+});
 
 ipcMain.handle("get-global-shortcut", () => {
-  return currentShortcut
-})
+  return currentShortcut;
+});
 
 ipcMain.handle("set-auto-launch", async (event, enable) => {
   try {
@@ -920,73 +1019,85 @@ ipcMain.handle("set-auto-launch", async (event, enable) => {
       openAtLogin: enable,
       openAsHidden: true,
       name: "Nexious Tools"
-    })
-    return true
+    });
+    return true;
   } catch (error) {
-    console.error("设置开机自启动失败:", error)
-    return false
+    console.error("设置开机自启动失败:", error);
+    return false;
   }
-})
+});
 
 ipcMain.handle("get-auto-launch", () => {
-  const settings = app.getLoginItemSettings()
-  return settings.openAtLogin
-})
+  const settings = app.getLoginItemSettings();
+  return settings.openAtLogin;
+});
 
 function parseBookmarksHtml(htmlContent) {
-  const bookmarks = []
-  const regex = /<DT><A\s+([^>]+)>([^<]+)<\/A>/gi
-  let match
-  
+  const bookmarks = [];
+  const regex = /<DT><A\s+([^>]+)>([^<]+)<\/A>/gi;
+  let match;
+
   while ((match = regex.exec(htmlContent)) !== null) {
-    const attrs = match[1]
-    const name = match[2].trim()
-    
-    const hrefMatch = attrs.match(/HREF="([^"]+)"/i)
-    const iconMatch = attrs.match(/ICON="([^"]*)"/i)
-    
+    const attrs = match[1];
+    const name = match[2].trim();
+
+    const hrefMatch = attrs.match(/HREF="([^"]+)"/i);
+    const iconMatch = attrs.match(/ICON="([^"]*)"/i);
+
     if (hrefMatch) {
-      const url = hrefMatch[1]
-      const icon = iconMatch ? iconMatch[1] : ''
-      
-      if (url && name && (url.startsWith('http://') || url.startsWith('https://'))) {
-        bookmarks.push({ name, url, icon })
+      const url = hrefMatch[1];
+      const icon = iconMatch ? iconMatch[1] : "";
+
+      if (
+        url &&
+        name &&
+        (url.startsWith("http://") || url.startsWith("https://"))
+      ) {
+        bookmarks.push({ name, url, icon });
       }
     }
   }
-  
-  return bookmarks
+
+  return bookmarks;
 }
 
 function parseChromeBookmarks(jsonContent) {
-  const bookmarks = []
-  
+  const bookmarks = [];
+
   function extractBookmarks(node) {
-    if (node.type === 'url' && node.url) {
+    if (node.type === "url" && node.url) {
+      let icon = "";
+      if (node.favicon) {
+        icon = node.favicon;
+      } else if (node.icon) {
+        icon = node.icon;
+      }
+      
       bookmarks.push({
         name: node.name || node.url,
-        url: node.url
-      })
+        url: node.url,
+        icon: icon
+      });
     }
     if (node.children) {
       for (const child of node.children) {
-        extractBookmarks(child)
+        extractBookmarks(child);
       }
     }
   }
-  
+
   try {
-    const data = JSON.parse(jsonContent)
+    const data = JSON.parse(jsonContent);
     if (data.roots) {
       for (const root of Object.values(data.roots)) {
-        extractBookmarks(root)
+        extractBookmarks(root);
       }
     }
   } catch (e) {
-    console.error('解析 Chrome 书签失败:', e.message)
+    console.error("解析 Chrome 书签失败:", e.message);
   }
-  
-  return bookmarks
+
+  return bookmarks;
 }
 
 ipcMain.handle("import-browser-bookmarks", async () => {
@@ -998,44 +1109,119 @@ ipcMain.handle("import-browser-bookmarks", async () => {
       { name: "JSON 书签", extensions: ["json"] },
       { name: "所有文件", extensions: ["*"] }
     ]
-  })
-  
+  });
+
   if (result.canceled || !result.filePaths[0]) {
-    return null
+    return null;
   }
-  
-  const filePath = result.filePaths[0]
-  const ext = path.extname(filePath).toLowerCase()
-  
+
+  const filePath = result.filePaths[0];
+  const ext = path.extname(filePath).toLowerCase();
+
   try {
-    const content = fs.readFileSync(filePath, 'utf-8')
-    
-    let bookmarks = []
-    if (ext === '.json') {
-      bookmarks = parseChromeBookmarks(content)
+    const content = fs.readFileSync(filePath, "utf-8");
+
+    let bookmarks = [];
+    if (ext === ".json") {
+      bookmarks = parseChromeBookmarks(content);
     } else {
-      bookmarks = parseBookmarksHtml(content)
+      bookmarks = parseBookmarksHtml(content);
     }
-    
-    return bookmarks
+
+    return bookmarks;
   } catch (e) {
-    console.error('读取书签文件失败:', e.message)
-    return null
+    console.error("读取书签文件失败:", e.message);
+    return null;
   }
-})
+});
 
 ipcMain.handle("get-browser-bookmarks-path", async () => {
-  const paths = []
-  
-  if (process.platform === 'win32') {
-    const chromePath = path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'User Data', 'Default', 'Bookmarks')
-    const edgePath = path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'Edge', 'User Data', 'Default', 'Bookmarks')
-    
+  const paths = [];
+
+  if (process.platform === "win32") {
+    const chromePath = path.join(
+      process.env.LOCALAPPDATA || "",
+      "Google",
+      "Chrome",
+      "User Data",
+      "Default",
+      "Bookmarks"
+    );
+    const edgePath = path.join(
+      process.env.LOCALAPPDATA || "",
+      "Microsoft",
+      "Edge",
+      "User Data",
+      "Default",
+      "Bookmarks"
+    );
+    const bravePath = path.join(
+      process.env.LOCALAPPDATA || "",
+      "BraveSoftware",
+      "Brave-Browser",
+      "User Data",
+      "Default",
+      "Bookmarks"
+    );
+
     if (fs.existsSync(chromePath)) {
-      paths.push({ browser: 'Chrome', path: chromePath })
+      paths.push({ browser: "Chrome", path: chromePath });
     }
     if (fs.existsSync(edgePath)) {
-      paths.push({ browser: 'Edge', path: edgePath })
+      paths.push({ browser: "Edge", path: edgePath });
+    }
+    if (fs.existsSync(bravePath)) {
+      paths.push({ browser: "Brave", path: bravePath });
     }
   }
-})
+
+  return paths;
+});
+
+ipcMain.handle("auto-read-browser-bookmarks", async (event, browser) => {
+  let bookmarkPath = null;
+
+  if (process.platform === "win32") {
+    const browserPaths = {
+      chrome: path.join(
+        process.env.LOCALAPPDATA || "",
+        "Google",
+        "Chrome",
+        "User Data",
+        "Default",
+        "Bookmarks"
+      ),
+      edge: path.join(
+        process.env.LOCALAPPDATA || "",
+        "Microsoft",
+        "Edge",
+        "User Data",
+        "Default",
+        "Bookmarks"
+      ),
+      brave: path.join(
+        process.env.LOCALAPPDATA || "",
+        "BraveSoftware",
+        "Brave-Browser",
+        "User Data",
+        "Default",
+        "Bookmarks"
+      )
+    };
+
+    bookmarkPath = browserPaths[browser?.toLowerCase()];
+  }
+
+  if (!bookmarkPath || !fs.existsSync(bookmarkPath)) {
+    return null;
+  }
+
+  try {
+    const content = fs.readFileSync(bookmarkPath, "utf-8");
+    const bookmarks = parseChromeBookmarks(content);
+    return bookmarks;
+  } catch (e) {
+    console.error("读取浏览器书签失败:", e.message);
+    return null;
+  }
+});

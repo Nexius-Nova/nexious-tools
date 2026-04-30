@@ -29,12 +29,22 @@
           </template>
           导入桌面应用
         </n-button>
-        <n-button @click="importBookmarks" :loading="importingBookmarks">
-          <template #icon>
-            <n-icon><BookmarkOutline /></n-icon>
-          </template>
-          导入浏览器书签
-        </n-button>
+        <n-dropdown
+          trigger="click"
+          :options="browserOptions"
+          @select="handleBrowserSelect"
+          :disabled="importingBookmarks"
+        >
+          <n-button :loading="importingBookmarks">
+            <template #icon>
+              <n-icon><BookmarkOutline /></n-icon>
+            </template>
+            导入浏览器书签
+            <template #suffix>
+              <n-icon><ChevronDownOutline /></n-icon>
+            </template>
+          </n-button>
+        </n-dropdown>
         <n-button type="primary" @click="openAddModal">
           <template #icon>
             <n-icon><AddOutline /></n-icon>
@@ -448,10 +458,10 @@
               </div>
               <div class="bookmark-card-icon">
                 <img
-                  v-if="bookmark.icon && !bookmark._iconError"
-                  :src="bookmark.icon"
+                  v-if="getBookmarkIcon(bookmark) && !bookmark._iconError"
+                  :src="getBookmarkIcon(bookmark)"
                   class="bookmark-icon-img"
-                  @error="bookmark._iconError = true"
+                  @error="handleBookmarkIconError(bookmark)"
                 />
                 <div
                   v-else
@@ -547,6 +557,7 @@ import {
   NSpin,
   NInput as NInputComponent,
   NDivider,
+  NDropdown,
   useMessage,
   useDialog
 } from "naive-ui";
@@ -565,7 +576,8 @@ import {
   SparklesOutline,
   CheckmarkCircleOutline,
   InformationCircleOutline,
-  BookmarkOutline
+  BookmarkOutline,
+  ChevronDownOutline
 } from "@vicons/ionicons5";
 import { websiteApi } from "../api/website";
 import WebsiteModal from "../components/WebsiteModal.vue";
@@ -612,7 +624,21 @@ const showBookmarkModal = ref(false);
 const scannedBookmarks = ref([]);
 const selectedBookmarks = ref([]);
 const bookmarkSearchQuery = ref("");
+const availableBrowsers = ref([]);
+const showBrowserDropdown = ref(false);
 const dragIndex = ref(-1);
+
+const browserOptions = computed(() => {
+  const options = availableBrowsers.value.map(b => ({
+    label: `从 ${b.browser} 导入`,
+    key: b.browser.toLowerCase()
+  }));
+  options.push({
+    label: "从文件导入...",
+    key: "file"
+  });
+  return options;
+});
 const dragOverIndex = ref(-1);
 const pageSize = ref(50);
 const loadingMore = ref(false);
@@ -1404,10 +1430,16 @@ const importSelectedApps = async () => {
   }
 };
 
-const importBookmarks = async () => {
+const importBookmarks = async (browser = null) => {
   importingBookmarks.value = true;
   try {
-    const bookmarks = await window.electronAPI?.importBrowserBookmarks();
+    let bookmarks;
+    if (browser) {
+      bookmarks = await window.electronAPI?.autoReadBrowserBookmarks(browser);
+    } else {
+      bookmarks = await window.electronAPI?.importBrowserBookmarks();
+    }
+    
     if (bookmarks && bookmarks.length > 0) {
       const existingUrls = new Set(
         items.value
@@ -1425,7 +1457,6 @@ const importBookmarks = async () => {
         showBookmarkModal.value = true;
       }
     } else if (bookmarks === null) {
-      // 用户取消选择
     } else {
       message.info("未找到新的书签");
     }
@@ -1438,6 +1469,25 @@ const importBookmarks = async () => {
   }
 };
 
+const handleBrowserSelect = (key) => {
+  if (key === "file") {
+    importBookmarks(null);
+  } else {
+    importBookmarks(key);
+  }
+};
+
+const loadAvailableBrowsers = async () => {
+  try {
+    const browsers = await window.electronAPI?.getBrowserBookmarksPath();
+    if (browsers && browsers.length > 0) {
+      availableBrowsers.value = browsers;
+    }
+  } catch (e) {
+    console.error("获取浏览器列表失败:", e);
+  }
+};
+
 const importSelectedBookmarks = async () => {
   importingBookmarks.value = true;
   let imported = 0;
@@ -1447,7 +1497,7 @@ const importSelectedBookmarks = async () => {
       const bookmark = scannedBookmarks.value.find((b) => b.url === url);
       if (bookmark) {
         try {
-          const favicon = bookmark.icon || getBookmarkFavicon(bookmark.url);
+          const favicon = getBookmarkIcon(bookmark);
           const response = await websiteApi.create({
             name: bookmark.name,
             url: bookmark.url,
@@ -1506,8 +1556,36 @@ const getBookmarkDomain = (url) => {
 };
 
 const getBookmarkFavicon = (url) => {
-  const domain = getBookmarkDomain(url);
-  return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+  try {
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname;
+    return `https://favicon.im/${hostname}?larger=true`;
+  } catch (e) {
+    const domain = getBookmarkDomain(url);
+    if (domain) {
+      return `https://favicon.im/${domain}?larger=true`;
+    }
+    return "";
+  }
+};
+
+const getBookmarkIcon = (bookmark) => {
+  if (bookmark.icon && (bookmark.icon.startsWith('data:') || bookmark.icon.startsWith('http'))) {
+    return bookmark.icon;
+  }
+  return getBookmarkFavicon(bookmark.url);
+};
+
+const handleBookmarkIconError = (bookmark) => {
+  if (!bookmark._fallbackTried) {
+    bookmark._fallbackTried = true;
+    const domain = getBookmarkDomain(bookmark.url);
+    if (domain) {
+      bookmark.icon = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+      return;
+    }
+  }
+  bookmark._iconError = true;
 };
 
 const handleDragStart = (e, index) => {
@@ -1561,6 +1639,7 @@ const handleDragEnd = () => {
 
 onMounted(() => {
   loadItems();
+  loadAvailableBrowsers();
 });
 </script>
 

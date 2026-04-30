@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAutoLaunch: () => ipcRenderer.invoke('get-auto-launch'),
   importBrowserBookmarks: () => ipcRenderer.invoke('import-browser-bookmarks'),
   getBrowserBookmarksPath: () => ipcRenderer.invoke('get-browser-bookmarks-path'),
+  autoReadBrowserBookmarks: (browser) => ipcRenderer.invoke('auto-read-browser-bookmarks', browser),
   onWindowRestored: (callback) => {
     ipcRenderer.on('window-restored', callback)
     return () => ipcRenderer.removeListener('window-restored', callback)
