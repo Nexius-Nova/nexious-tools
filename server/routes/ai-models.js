@@ -139,7 +139,7 @@ router.post('/:id/toggle', async (req, res) => {
     const newStatus = existing.is_enabled ? 0 : 1
     
     if (newStatus === 1) {
-      await execute('UPDATE ai_models SET is_enabled = 0')
+      await execute('UPDATE ai_models SET is_enabled = 0, is_default = 0')
       await execute('UPDATE ai_models SET is_enabled = 1, is_default = 1 WHERE id = ?', [id])
     } else {
       await execute('UPDATE ai_models SET is_enabled = 0, is_default = 0 WHERE id = ?', [id])

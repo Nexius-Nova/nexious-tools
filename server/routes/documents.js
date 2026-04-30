@@ -1,7 +1,332 @@
 import express from 'express'
+import multer from 'multer'
 import { query, queryOne, execute } from '../db.js'
+import path from 'path'
+import fs from 'fs'
+import { fileURLToPath } from 'url'
+import { createRequire } from 'module'
+import mammoth from 'mammoth'
+import * as XLSX from 'xlsx'
+
+const require = createRequire(import.meta.url)
+
+let __dirname
+const metaUrl = import.meta.url
+if (metaUrl && metaUrl !== '') {
+  try {
+    const __filename = fileURLToPath(metaUrl)
+    __dirname = path.dirname(__filename)
+  } catch (e) {
+    __dirname = process.cwd()
+  }
+} else {
+  __dirname = process.cwd()
+}
 
 const router = express.Router()
+
+const tempDir = process.env.RESOURCES_PATH 
+  ? path.join(process.env.RESOURCES_PATH, 'temp')
+  : path.resolve(__dirname, '..', 'temp')
+
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir, { recursive: true })
+}
+
+const docUpload = multer({
+  dest: tempDir,
+  limits: {
+    fileSize: 50 * 1024 * 1024
+  }
+})
+
+const supportedExtensions = [
+  '.pdf', '.docx', '.xlsx', '.xls',
+  '.html', '.htm', '.csv', '.json', '.xml',
+  '.md', '.markdown'
+]
+
+const convertPdfToMarkdown = async (filePath) => {
+  const dataBuffer = fs.readFileSync(filePath)
+  const { PDFParse } = require('pdf-parse')
+  const parser = new PDFParse({ data: dataBuffer })
+  const result = await parser.getText()
+  return result.text
+}
+
+const convertDocxToMarkdown = async (filePath) => {
+  const result = await mammoth.convertToMarkdown({ path: filePath })
+  return result.value
+}
+
+const convertExcelToMarkdown = async (filePath) => {
+  const workbook = XLSX.readFile(filePath)
+  let markdown = ''
+  
+  workbook.SheetNames.forEach((sheetName, index) => {
+    if (index > 0) markdown += '\n\n'
+    markdown += `## ${sheetName}\n\n`
+    
+    const sheet = workbook.Sheets[sheetName]
+    const csv = XLSX.utils.sheet_to_csv(sheet)
+    
+    const lines = csv.split('\n').filter(line => line.trim())
+    if (lines.length > 0) {
+      const headerLine = lines[0]
+      const headers = headerLine.split(',')
+      markdown += '| ' + headers.join(' | ') + ' |\n'
+      markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n'
+      
+      for (let i = 1; i < lines.length; i++) {
+        const cells = lines[i].split(',')
+        markdown += '| ' + cells.join(' | ') + ' |\n'
+      }
+    }
+  })
+  
+  return markdown
+}
+
+const convertHtmlToMarkdown = async (filePath) => {
+  const html = fs.readFileSync(filePath, 'utf-8')
+  
+  let markdown = html
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+    .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+    .replace(/<header[\s\S]*?<\/header>/gi, '')
+  
+  markdown = markdown
+    .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n\n')
+    .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n\n')
+    .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n\n')
+    .replace(/<h4[^>]*>(.*?)<\/h4>/gi, '#### $1\n\n')
+    .replace(/<h5[^>]*>(.*?)<\/h5>/gi, '##### $1\n\n')
+    .replace(/<h6[^>]*>(.*?)<\/h6>/gi, '###### $1\n\n')
+    .replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<li[^>]*>(.*?)<\/li>/gi, '- $1\n')
+    .replace(/<ul[^>]*>(.*?)<\/ul>/gi, '$1\n')
+    .replace(/<ol[^>]*>(.*?)<\/ol>/gi, '$1\n')
+    .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
+    .replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**')
+    .replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*')
+    .replace(/<i[^>]*>(.*?)<\/i>/gi, '*$1*')
+    .replace(/<code[^>]*>(.*?)<\/code>/gi, '`$1`')
+    .replace(/<pre[^>]*>(.*?)<\/pre>/gis, '```\n$1\n```\n\n')
+    .replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gis, '> $1\n\n')
+    .replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, '[$2]($1)')
+    .replace(/<img[^>]*src="([^"]*)"[^>]*alt="([^"]*)"[^>]*\/?>/gi, '![$2]($1)')
+    .replace(/<img[^>]*src="([^"]*)"[^>]*\/?>/gi, '![]($1)')
+    .replace(/<hr\s*\/?>/gi, '\n---\n\n')
+    .replace(/<[^>]+>/g, '')
+  
+  markdown = markdown
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  
+  return markdown
+}
+
+const convertCsvToMarkdown = async (filePath) => {
+  const content = fs.readFileSync(filePath, 'utf-8')
+  const lines = content.split('\n').filter(line => line.trim())
+  
+  if (lines.length === 0) return ''
+  
+  const headers = lines[0].split(',')
+  let markdown = '| ' + headers.join(' | ') + ' |\n'
+  markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n'
+  
+  for (let i = 1; i < lines.length; i++) {
+    const cells = lines[i].split(',')
+    markdown += '| ' + cells.join(' | ') + ' |\n'
+  }
+  
+  return markdown
+}
+
+const convertJsonToMarkdown = async (filePath) => {
+  const content = fs.readFileSync(filePath, 'utf-8')
+  const json = JSON.parse(content)
+  
+  const formatValue = (value, indent = 0) => {
+    const spaces = '  '.repeat(indent)
+    
+    if (value === null) return 'null'
+    if (typeof value === 'boolean') return value ? 'true' : 'false'
+    if (typeof value === 'number') return value.toString()
+    if (typeof value === 'string') return value
+    
+    if (Array.isArray(value)) {
+      if (value.length === 0) return '[]'
+      if (typeof value[0] !== 'object') {
+        return value.map(v => `- ${v}`).join('\n' + spaces)
+      }
+      return value.map((item, i) => {
+        return `### Item ${i + 1}\n\n` + formatObject(item, indent + 1)
+      }).join('\n\n')
+    }
+    
+    if (typeof value === 'object') {
+      return formatObject(value, indent)
+    }
+    
+    return String(value)
+  }
+  
+  const formatObject = (obj, indent = 0) => {
+    const spaces = '  '.repeat(indent)
+    let result = ''
+    
+    for (const [key, value] of Object.entries(obj)) {
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        result += `${spaces}### ${key}\n\n`
+        result += formatObject(value, indent + 1) + '\n'
+      } else if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+        result += `${spaces}### ${key}\n\n`
+        value.forEach((item, i) => {
+          result += `${spaces}#### Item ${i + 1}\n\n`
+          result += formatObject(item, indent + 2) + '\n'
+        })
+      } else {
+        result += `${spaces}- **${key}**: ${formatValue(value, indent)}\n`
+      }
+    }
+    
+    return result
+  }
+  
+  if (Array.isArray(json)) {
+    return formatValue(json)
+  }
+  
+  return formatObject(json)
+}
+
+const convertXmlToMarkdown = async (filePath) => {
+  const content = fs.readFileSync(filePath, 'utf-8')
+  
+  let markdown = content
+    .replace(/<\?xml[^>]*\?>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+  
+  const convertElement = (match, tagName, attributes, innerContent) => {
+    const indent = '  '.repeat((match.search(/\S/) / 2) || 0)
+    
+    if (!innerContent || innerContent.trim() === '') {
+      return `${indent}- **${tagName}**: ${attributes || ''}\n`
+    }
+    
+    if (!/<[^>]+>/.test(innerContent)) {
+      return `${indent}- **${tagName}**: ${innerContent.trim()}\n`
+    }
+    
+    return `${indent}### ${tagName}\n\n${innerContent}\n`
+  }
+  
+  markdown = markdown
+    .replace(/<(\w+)([^>]*)>([^<]*)<\/\1>/g, (match, tag, attrs, content) => {
+      return `- **${tag}**: ${content.trim()}\n`
+    })
+    .replace(/<(\w+)([^>]*)\/>/g, (match, tag, attrs) => {
+      return `- **${tag}**\n`
+    })
+    .replace(/<[^>]+>/g, '')
+  
+  markdown = markdown
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  
+  return markdown
+}
+
+router.post('/convert', docUpload.single('file'), async (req, res) => {
+  const tempFilePath = req.file?.path
+  
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: '没有上传文件' })
+    }
+
+    const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8')
+    const ext = path.extname(originalName).toLowerCase()
+    
+    if (!supportedExtensions.includes(ext)) {
+      fs.unlinkSync(tempFilePath)
+      return res.status(400).json({ 
+        error: `不支持的文件格式: ${ext}。支持的格式: ${supportedExtensions.join(', ')}` 
+      })
+    }
+
+    let content = ''
+    
+    switch (ext) {
+      case '.pdf':
+        content = await convertPdfToMarkdown(tempFilePath)
+        break
+      case '.docx':
+        content = await convertDocxToMarkdown(tempFilePath)
+        break
+      case '.xlsx':
+      case '.xls':
+        content = await convertExcelToMarkdown(tempFilePath)
+        break
+      case '.html':
+      case '.htm':
+        content = await convertHtmlToMarkdown(tempFilePath)
+        break
+      case '.csv':
+        content = await convertCsvToMarkdown(tempFilePath)
+        break
+      case '.json':
+        content = await convertJsonToMarkdown(tempFilePath)
+        break
+      case '.xml':
+        content = await convertXmlToMarkdown(tempFilePath)
+        break
+      case '.md':
+      case '.markdown':
+        content = fs.readFileSync(tempFilePath, 'utf-8')
+        break
+      default:
+        content = fs.readFileSync(tempFilePath, 'utf-8')
+    }
+
+    let title = path.basename(originalName, ext)
+    const titleMatch = content.match(/^#\s+(.+)$/m)
+    if (titleMatch) {
+      title = titleMatch[1].trim()
+    }
+
+    res.json({
+      data: {
+        content: content,
+        title: title,
+        originalName: originalName
+      }
+    })
+  } catch (error) {
+    console.error('文档转换失败:', error)
+    res.status(500).json({ error: error.message || '文档转换失败' })
+  } finally {
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      try {
+        fs.unlinkSync(tempFilePath)
+      } catch (e) {
+        console.error('删除临时文件失败:', e)
+      }
+    }
+  }
+})
 
 router.get('/', async (req, res) => {
   try {

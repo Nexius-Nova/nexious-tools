@@ -10,5 +10,6 @@ export const promptTemplateApi = {
   getById: (id) => api.get(`/prompt-templates/${id}`),
   create: (data) => api.post('/prompt-templates', data),
   update: (id, data) => api.put(`/prompt-templates/${id}`, data),
-  delete: (id) => api.delete(`/prompt-templates/${id}`)
+  delete: (id) => api.delete(`/prompt-templates/${id}`),
+  clearAll: () => api.delete('/prompt-templates/clear/all')
 }

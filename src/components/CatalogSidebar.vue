@@ -1,45 +1,16 @@
 <template>
   <div 
     class="catalog-sidebar"
-    :class="{ collapsed: isCollapsed }"
-    :style="{ width: isCollapsed ? '48px' : `${width}px` }"
+    :style="{ width: `${width}px` }"
   >
     <div class="catalog-header">
-      <template v-if="!isCollapsed">
-        <div class="header-left">
-          <n-icon size="16"><ListOutline /></n-icon>
-          <span class="header-title">目录</span>
-        </div>
-        <div class="header-actions">
-          <n-button 
-            quaternary 
-            circle 
-            size="tiny"
-            @click="toggleCollapse"
-            title="折叠目录"
-          >
-            <template #icon>
-              <n-icon size="14"><ChevronBackOutline /></n-icon>
-            </template>
-          </n-button>
-        </div>
-      </template>
-      <template v-else>
-        <n-button 
-          quaternary 
-          circle 
-          size="small"
-          @click="toggleCollapse"
-          title="展开目录"
-        >
-          <template #icon>
-            <n-icon size="16"><ListOutline /></n-icon>
-          </template>
-        </n-button>
-      </template>
+      <div class="header-left">
+        <n-icon size="16"><ListOutline /></n-icon>
+        <span class="header-title">目录</span>
+      </div>
     </div>
 
-    <div class="catalog-body" v-show="!isCollapsed">
+    <div class="catalog-body">
       <div v-if="headings.length === 0" class="catalog-empty">
         <n-icon size="24" :depth="3"><DocumentTextOutline /></n-icon>
         <span>暂无目录</span>
@@ -74,7 +45,6 @@
     </div>
 
     <div 
-      v-show="!isCollapsed"
       class="resize-handle"
       @mousedown="startResize"
     ></div>
@@ -83,8 +53,8 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import { NIcon, NButton, NBadge } from 'naive-ui'
-import { ListOutline, ChevronBackOutline, DocumentTextOutline } from '@vicons/ionicons5'
+import { NIcon } from 'naive-ui'
+import { ListOutline, DocumentTextOutline } from '@vicons/ionicons5'
 
 const props = defineProps({
   content: {
@@ -107,7 +77,6 @@ const props = defineProps({
 
 const emit = defineEmits(['navigate'])
 
-const isCollapsed = ref(false)
 const width = ref(240)
 const activeIndex = ref(-1)
 const progressTop = ref(0)
@@ -137,10 +106,6 @@ const headings = computed(() => {
   
   return result
 })
-
-const toggleCollapse = () => {
-  isCollapsed.value = !isCollapsed.value
-}
 
 const getScrollElement = () => {
   if (props.scrollContainer) {
@@ -306,31 +271,18 @@ watch(() => props.content, () => {
   border-right: 1px solid var(--border-color);
   position: relative;
   flex-shrink: 0;
-  transition: width 0.2s ease;
-  min-width: 48px;
+  min-width: 180px;
   max-width: 400px;
-}
-
-.catalog-sidebar.collapsed {
-  align-items: center;
-  padding-top: 8px;
 }
 
 .catalog-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 12px 16px;
   font-weight: 500;
   font-size: 14px;
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
-}
-
-.collapsed .catalog-header {
-  padding: 8px;
-  border-bottom: none;
-  justify-content: center;
 }
 
 .header-left {
@@ -341,11 +293,6 @@ watch(() => props.content, () => {
 
 .header-title {
   color: var(--text-color);
-}
-
-.header-actions {
-  display: flex;
-  gap: 4px;
 }
 
 .catalog-body {

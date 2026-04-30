@@ -78,4 +78,13 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
+router.delete('/clear/all', async (req, res) => {
+  try {
+    await execute('DELETE FROM prompt_templates WHERE is_default = 0')
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
 export default router

@@ -4,7 +4,7 @@
       class="tree-item"
       :class="{ active: isActive, 'drag-over': isDragOver, disabled: disabled }"
       :style="{ paddingLeft: `${level * 16 + 8}px` }"
-      @click="disabled ? null : handleSelect"
+      @click="handleClick"
       @dragover.prevent="handleDragOver"
       @dragleave="handleDragLeave"
       @drop.prevent="handleDrop"
@@ -80,6 +80,11 @@ const isActive = computed(() => props.currentFolderId === props.folder.id || Str
 
 const handleSelect = () => {
   emit('select', props.folder.id)
+}
+
+const handleClick = () => {
+  if (props.disabled) return
+  handleSelect()
 }
 
 const handleToggleExpand = () => {

@@ -224,7 +224,7 @@
         </template>
         <n-space vertical>
           <n-text depth="3" style="margin-bottom: 16px">
-            导出或导入应用数据，包含网站、密码、代码片段、文档、AI模型配置等所有数据
+            导出或导入应用数据，包含网站、密码、代码片段、文档、AI模型配置、AI对话记录、提示词模板等所有数据
           </n-text>
 
           <n-space>
@@ -263,7 +263,7 @@
           <n-descriptions-item label="应用名称">
             Nexious Tools
           </n-descriptions-item>
-          <n-descriptions-item label="版本号"> v1.0.0 </n-descriptions-item>
+          <n-descriptions-item label="版本号"> v1.0.1 </n-descriptions-item>
           <n-descriptions-item label="技术栈">
             Electron + Vue3
           </n-descriptions-item>
@@ -326,6 +326,8 @@ import { snippetApi } from "../api/snippet";
 import { documentApi } from "../api/documents";
 import { docFolderApi } from "../api/doc-folders";
 import { aiModelsApi } from "../api/ai-models";
+import { aiMessageApi } from "../api/ai-message";
+import { promptTemplateApi } from "../api/prompt-templates";
 
 const message = useMessage();
 const dialog = useDialog();
@@ -920,6 +922,8 @@ const exportData = async () => {
       documents,
       docFolders,
       aiModelsData,
+      aiMessages,
+      promptTemplates,
       appSettings
     ] = await Promise.all([
       websiteApi.getAll(),
@@ -928,6 +932,8 @@ const exportData = async () => {
       documentApi.getAll(),
       docFolderApi.getFlat(),
       aiModelsApi.getAll(),
+      aiMessageApi.getAll(),
+      promptTemplateApi.getAll(),
       settingsApi.getAll()
     ]);
 
@@ -941,6 +947,8 @@ const exportData = async () => {
         documents: documents.data.data || [],
         docFolders: docFolders.data.data || [],
         aiModels: aiModelsData.data.data || [],
+        aiMessages: aiMessages.data.data || [],
+        promptTemplates: promptTemplates.data.data || [],
         settings: appSettings.data.data || {}
       }
     };
@@ -990,12 +998,14 @@ const handleFileSelect = async (event) => {
       passwords: data.passwords?.length || 0,
       snippets: data.snippets?.length || 0,
       documents: data.documents?.length || 0,
-      aiModels: data.aiModels?.length || 0
+      aiModels: data.aiModels?.length || 0,
+      aiMessages: data.aiMessages?.length || 0,
+      promptTemplates: data.promptTemplates?.length || 0
     };
 
     dialog.info({
       title: "选择导入方式",
-      content: `检测到备份文件包含：网站 ${stats.websites} 个、密码 ${stats.passwords} 个、代码片段 ${stats.snippets} 个、文档 ${stats.documents} 个、AI模型 ${stats.aiModels} 个`,
+      content: `检测到备份文件包含：网站 ${stats.websites} 个、密码 ${stats.passwords} 个、代码片段 ${stats.snippets} 个、文档 ${stats.documents} 个、AI模型 ${stats.aiModels} 个、AI对话 ${stats.aiMessages} 个、提示词模板 ${stats.promptTemplates} 个`,
       positiveText: "覆盖导入",
       negativeText: "增量导入",
       onPositiveClick: async () => {
@@ -1022,7 +1032,9 @@ const doImport = async (data, mode) => {
         passwordApi.clearAll(),
         snippetApi.clearAll(),
         documentApi.clearAll(),
-        aiModelsApi.clearAll()
+        aiModelsApi.clearAll(),
+        aiMessageApi.clearAll(),
+        promptTemplateApi.clearAll()
       ]);
     }
 
@@ -1102,6 +1114,33 @@ const doImport = async (data, mode) => {
           }
         } else {
           await aiModelsApi.create(item);
+        }
+      }
+    }
+
+    if (data.aiMessages?.length) {
+      for (const item of data.aiMessages) {
+        await aiMessageApi.saveMessage({
+          conversation_id: item.conversation_id,
+          role: item.role,
+          content: item.content,
+          references: item.references || item.refs,
+          images: item.images
+        });
+      }
+    }
+
+    if (data.promptTemplates?.length) {
+      for (const item of data.promptTemplates) {
+        if (mode === "merge") {
+          const existing = await promptTemplateApi.getById(item.id).catch(() => null);
+          if (existing?.data?.data) {
+            await promptTemplateApi.update(item.id, item);
+          } else {
+            await promptTemplateApi.create(item);
+          }
+        } else {
+          await promptTemplateApi.create(item);
         }
       }
     }

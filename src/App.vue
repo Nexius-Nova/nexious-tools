@@ -7,7 +7,7 @@
       <n-dialog-provider>
         <div class="app-container" :class="{ 'full-app': showFullApp }">
           <template v-if="showFullApp">
-            <TitleBar />
+            <TitleBar :showBackButton="showBackButton" @back="backToQuickSearch" />
             <n-layout has-sider class="main-layout">
               <Sidebar 
                 :activeTab="currentTab" 
@@ -18,14 +18,6 @@
               />
               <n-layout>
                 <n-layout-content class="content-area">
-                  <div class="content-header" v-if="showBackButton">
-                    <n-button text @click="backToQuickSearch" class="back-btn">
-                      <template #icon>
-                        <n-icon><ArrowBackOutline /></n-icon>
-                      </template>
-                      返回快速搜索窗
-                    </n-button>
-                  </div>
                   <router-view v-slot="{ Component }">
                     <transition name="page-fade" mode="out-in">
                       <suspense>
@@ -267,7 +259,6 @@ import {
   KeyOutline,
   CodeSlashOutline,
   EnterOutline,
-  ArrowBackOutline,
   DocumentOutline,
   GlobeOutline
 } from "@vicons/ionicons5";
@@ -695,6 +686,14 @@ const handleKeydown = (e) => {
       showShortcutHelp.value = false;
       return;
     }
+    if (showQuickSearch.value) {
+      showQuickSearch.value = false;
+      return;
+    }
+    if (showFullApp.value && showBackButton.value) {
+      backToQuickSearch();
+      return;
+    }
     if (!showFullApp.value) {
       if (quickSearchQuery.value) {
         quickSearchQuery.value = "";
@@ -703,7 +702,6 @@ const handleKeydown = (e) => {
         nextTick(updateWindowSize);
       }
     }
-    showQuickSearch.value = false;
   }
   if (e.shiftKey && e.key === "?") {
     e.preventDefault();
@@ -776,19 +774,6 @@ onUnmounted(() => {
   overflow-y: auto;
   background-color: var(--bg-color);
   height: calc(100vh - var(--title-bar-height));
-}
-
-.content-header {
-  margin-bottom: 12px;
-}
-
-.back-btn {
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.back-btn:hover {
-  color: var(--primary-color);
 }
 
 .quick-launch-mode {
