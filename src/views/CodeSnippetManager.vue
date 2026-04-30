@@ -456,7 +456,7 @@ const selectedSnippet = ref(null);
 const editingSnippet = ref(null);
 const showAddCategoryInput = ref(false);
 const newCategoryName = ref("");
-const viewerTheme = ref("vs-dark");
+const viewerTheme = ref(localStorage.getItem('snippet-viewer-theme') || "vs-dark");
 const draggingSnippetId = ref(null);
 const dragOverCategory = ref(null);
 const editingCategoryId = ref(null);
@@ -923,6 +923,10 @@ watch(filteredSnippets, (newVal) => {
   } else if (newVal.length === 0) {
     selectedSnippet.value = null;
   }
+});
+
+watch(viewerTheme, (newTheme) => {
+  localStorage.setItem('snippet-viewer-theme', newTheme);
 });
 
 onMounted(async () => {
