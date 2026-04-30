@@ -247,8 +247,12 @@
 
       <div class="column snippet-content-column">
         <div class="column-header">
-          <n-text strong>代码内容</n-text>
-          <n-space v-if="selectedSnippet" :size="8">
+          <n-text strong>{{ isEditMode ? (editingSnippet?.id ? '编辑片段' : '添加片段') : '代码内容' }}</n-text>
+          <n-space v-if="isEditMode" :size="8">
+            <n-button size="small" @click="cancelEdit">取消</n-button>
+            <n-button size="small" type="primary" @click="saveSnippet" :loading="saving">保存</n-button>
+          </n-space>
+          <n-space v-else-if="selectedSnippet" :size="8">
             <n-button size="small" @click="formatCode">
               <template #icon>
                 <n-icon><CodeOutline /></n-icon>
@@ -270,7 +274,58 @@
           </n-space>
         </div>
         <div class="column-content">
-          <template v-if="selectedSnippet">
+          <template v-if="isEditMode">
+            <div class="edit-form">
+              <n-form :model="editForm" label-placement="left" label-width="80">
+                <n-form-item label="标题" required>
+                  <n-input v-model:value="editForm.title" placeholder="输入代码片段标题" />
+                </n-form-item>
+                <n-form-item label="语言">
+                  <n-select
+                    v-model:value="editForm.language"
+                    :options="languageOptions"
+                    placeholder="选择编程语言"
+                    filterable
+                    tag
+                  />
+                </n-form-item>
+                <n-form-item label="分类">
+                  <n-select
+                    v-model:value="editForm.category"
+                    :options="categoryOptions"
+                    placeholder="选择分类"
+                    clearable
+                    filterable
+                    tag
+                  />
+                </n-form-item>
+                <n-form-item label="描述">
+                  <n-input
+                    v-model:value="editForm.description"
+                    type="textarea"
+                    placeholder="输入代码片段描述"
+                    :rows="2"
+                  />
+                </n-form-item>
+                <n-form-item label="标签">
+                  <n-dynamic-tags v-model:value="editForm.tags" />
+                </n-form-item>
+                <n-form-item label="代码" required>
+                  <div class="code-editor-wrapper">
+                    <MonacoEditor
+                      ref="editorRef"
+                      v-model="editForm.code"
+                      :language="editForm.language || 'javascript'"
+                      :theme="viewerTheme"
+                      :min-height="300"
+                      :max-height="500"
+                    />
+                  </div>
+                </n-form-item>
+              </n-form>
+            </div>
+          </template>
+          <template v-else-if="selectedSnippet">
             <div class="snippet-detail">
               <div class="detail-header">
                 <div style="display: flex; align-items: center; gap: 8px;">
@@ -342,13 +397,6 @@
       </div>
     </div>
 
-    <SnippetModal
-      :show="showModal"
-      :snippet="editingSnippet"
-      :categories="categoryNames"
-      @close="closeModal"
-      @save="handleSave"
-    />
   </div>
 </template>
 
@@ -368,6 +416,9 @@ import {
   NBadge,
   NSelect,
   NTooltip,
+  NForm,
+  NFormItem,
+  NDynamicTags,
   useMessage,
   useDialog
 } from "naive-ui";
@@ -387,7 +438,6 @@ import {
   CodeOutline
 } from "@vicons/ionicons5";
 import { snippetApi } from "../api/snippet";
-import SnippetModal from "../components/SnippetModal.vue";
 import MonacoEditor from "../components/MonacoEditor.vue";
 import { useData } from "../store/data";
 
@@ -403,7 +453,6 @@ const useRegexSearch = ref(false);
 const selectedCategory = ref(null);
 const selectedTag = ref(null);
 const selectedSnippet = ref(null);
-const showModal = ref(false);
 const editingSnippet = ref(null);
 const showAddCategoryInput = ref(false);
 const newCategoryName = ref("");
@@ -413,6 +462,17 @@ const dragOverCategory = ref(null);
 const editingCategoryId = ref(null);
 const editingCategoryName = ref("");
 const viewerEditorRef = ref(null);
+const editorRef = ref(null);
+const isEditMode = ref(false);
+const saving = ref(false);
+const editForm = ref({
+  title: '',
+  language: 'javascript',
+  category: '',
+  description: '',
+  tags: [],
+  code: ''
+});
 
 const themeOptions = [
   { label: "VSCode 暗色", value: "vs-dark" },
@@ -420,7 +480,38 @@ const themeOptions = [
   { label: "高对比度", value: "hc-black" }
 ];
 
-const categoryNames = computed(() => categories.value.map((c) => c.name));
+const languageOptions = [
+  { label: 'JavaScript', value: 'javascript' },
+  { label: 'TypeScript', value: 'typescript' },
+  { label: 'Python', value: 'python' },
+  { label: 'Java', value: 'java' },
+  { label: 'C++', value: 'cpp' },
+  { label: 'C#', value: 'csharp' },
+  { label: 'Go', value: 'go' },
+  { label: 'Rust', value: 'rust' },
+  { label: 'PHP', value: 'php' },
+  { label: 'Ruby', value: 'ruby' },
+  { label: 'Swift', value: 'swift' },
+  { label: 'Kotlin', value: 'kotlin' },
+  { label: 'SQL', value: 'sql' },
+  { label: 'HTML', value: 'html' },
+  { label: 'CSS', value: 'css' },
+  { label: 'SCSS', value: 'scss' },
+  { label: 'Less', value: 'less' },
+  { label: 'JSON', value: 'json' },
+  { label: 'XML', value: 'xml' },
+  { label: 'YAML', value: 'yaml' },
+  { label: 'Markdown', value: 'markdown' },
+  { label: 'Shell', value: 'shell' },
+  { label: 'PowerShell', value: 'powershell' },
+  { label: 'Dockerfile', value: 'dockerfile' },
+  { label: 'Vue', value: 'vue' },
+  { label: 'React', value: 'jsx' }
+];
+
+const categoryOptions = computed(() => 
+  categories.value.map(c => ({ label: c.name, value: c.name }))
+);
 
 const highlightText = (text) => {
   if (!searchQuery.value || !text) return text;
@@ -569,42 +660,101 @@ const loadTags = async () => {
 };
 
 const openAddModal = () => {
-  editingSnippet.value = { category: selectedCategory.value || "" };
-  showModal.value = true;
+  isEditMode.value = true;
+  editingSnippet.value = null;
+  editForm.value = {
+    title: '',
+    language: 'javascript',
+    category: selectedCategory.value || '',
+    description: '',
+    tags: [],
+    code: ''
+  };
+  selectedSnippet.value = null;
 };
 
 const editSnippet = (snippet) => {
-  editingSnippet.value = { ...snippet };
-  showModal.value = true;
+  isEditMode.value = true;
+  editingSnippet.value = snippet;
+  editForm.value = {
+    title: snippet.title,
+    language: snippet.language,
+    category: snippet.category || '',
+    description: snippet.description || '',
+    tags: snippet.tags || [],
+    code: snippet.code
+  };
 };
 
-const closeModal = () => {
-  showModal.value = false;
+const cancelEdit = () => {
+  isEditMode.value = false;
   editingSnippet.value = null;
+  editForm.value = {
+    title: '',
+    language: 'javascript',
+    category: '',
+    description: '',
+    tags: [],
+    code: ''
+  };
 };
 
-const handleSave = async (data) => {
-  const isEditing = !!editingSnippet.value?.id
-  const editingId = editingSnippet.value?.id
+const saveSnippet = async () => {
+  if (!editForm.value.title || !editForm.value.code) {
+    message.warning('请填写标题和代码内容');
+    return;
+  }
+  
+  saving.value = true;
+  
   try {
-    if (isEditing) {
-      await snippetApi.update(editingId, data);
-      updateSnippet(editingId, data);
+    if (editingSnippet.value?.id) {
+      const response = await fetch(
+        `http://localhost:3000/api/snippets/${editingSnippet.value.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(editForm.value)
+        }
+      );
+      
+      if (!response.ok) throw new Error("更新失败");
+      
       message.success("更新成功");
-    } else {
-      const response = await snippetApi.create(data);
-      if (response.data.data) {
-        addSnippet(response.data.data);
+      await loadSnippets();
+      const updated = snippets.value.find(s => s.id === editingSnippet.value.id);
+      if (updated) {
+        selectedSnippet.value = updated;
       }
-      message.success("添加成功");
+    } else {
+      const response = await fetch("http://localhost:3000/api/snippets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm.value)
+      });
+      
+      if (!response.ok) throw new Error("创建失败");
+      
+      const newSnippet = await response.json();
+      message.success("创建成功");
+      await loadSnippets();
+      selectedSnippet.value = newSnippet;
     }
-    closeModal();
-    await loadSnippets();
-    await loadCategories();
-    await loadTags();
+    
+    isEditMode.value = false;
+    editingSnippet.value = null;
+    editForm.value = {
+      title: '',
+      language: 'javascript',
+      category: '',
+      description: '',
+      tags: [],
+      code: ''
+    };
   } catch (error) {
-    console.error("保存代码片段失败:", error);
-    message.error("保存失败，请重试");
+    message.error(editingSnippet.value?.id ? "更新失败" : "创建失败");
+  } finally {
+    saving.value = false;
   }
 };
 
@@ -1057,5 +1207,18 @@ onMounted(async () => {
 
 .code-card :deep(.n-card__content) {
   padding: 0;
+}
+
+.edit-form {
+  padding: 4px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.code-editor-wrapper {
+  width: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
 }
 </style>
