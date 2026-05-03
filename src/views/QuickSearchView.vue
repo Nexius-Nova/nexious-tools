@@ -131,12 +131,6 @@
     <div class="command-empty" v-else-if="isInputFocused && quickSearchQuery && quickResults.length === 0">
       <n-text depth="3">未找到匹配的结果</n-text>
     </div>
-
-    <div class="command-footer" v-if="isInputFocused">
-      <span><kbd>↑</kbd><kbd>↓</kbd> 导航</span>
-      <span><kbd>Enter</kbd> 打开</span>
-      <span><kbd>Esc</kbd> 关闭</span>
-    </div>
   </div>
 </template>
 
@@ -652,29 +646,6 @@ defineExpose({
   background: rgba(255, 255, 255, 0.98);
   border-bottom-left-radius: 10px;
   border-bottom-right-radius: 10px;
-}
-
-.command-footer {
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  padding: 12px;
-  border-top: 1px solid var(--border-color);
-  font-size: 12px;
-  color: var(--text-color-4);
-  background: rgba(255, 255, 255, 0.98);
-  border-bottom-left-radius: 10px;
-  border-bottom-right-radius: 10px;
-}
-
-.command-footer kbd {
-  display: inline-block;
-  padding: 2px 6px;
-  background: var(--bg-color);
-  border-radius: 4px;
-  font-family: 'SF Mono', 'Consolas', monospace;
-  font-size: 11px;
-  margin-right: 4px;
 }
 
 @media (max-width: 768px) {
