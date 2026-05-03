@@ -263,7 +263,7 @@
           <n-descriptions-item label="应用名称">
             Nexious Tools
           </n-descriptions-item>
-          <n-descriptions-item label="版本号"> v1.0.1 </n-descriptions-item>
+          <n-descriptions-item label="版本号"> v1.0.3 </n-descriptions-item>
           <n-descriptions-item label="技术栈">
             Electron + Vue3
           </n-descriptions-item>

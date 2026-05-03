@@ -317,8 +317,8 @@
                       v-model="editForm.code"
                       :language="editForm.language || 'javascript'"
                       :theme="viewerTheme"
-                      :min-height="300"
-                      :max-height="500"
+                      :min-height="500"
+                      :max-height="800"
                     />
                   </div>
                 </n-form-item>
@@ -371,17 +371,17 @@
                   style="width: 120px"
                 />
               </div>
-              <n-card embedded class="code-card">
+              <div class="code-card">
                 <MonacoEditor
                   ref="viewerEditorRef"
                   v-model="selectedSnippet.code"
                   :language="selectedSnippet.language"
                   :theme="viewerTheme"
                   :read-only="true"
-                  :min-height="400"
-                  :max-height="600"
+                  :min-height="500"
+                  :max-height="800"
                 />
-              </n-card>
+              </div>
             </div>
           </template>
           <div v-else class="empty-state">
@@ -1212,10 +1212,6 @@ onMounted(async () => {
   border-radius: 8px;
 }
 
-.code-card :deep(.n-card__content) {
-  padding: 0;
-}
-
 .edit-form {
   padding: 4px;
   height: 100%;
@@ -1224,7 +1220,7 @@ onMounted(async () => {
 
 .code-editor-wrapper {
   width: 100%;
-  border: 1px solid var(--border-color);
+  /* border: 1px solid var(--border-color); */
   border-radius: 4px;
   overflow: hidden;
 }

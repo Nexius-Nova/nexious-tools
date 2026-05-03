@@ -412,14 +412,22 @@ const mdHeadingId = ({ text, level, index }) => {
 
 const scrollToEditorBottom = (() => {
   let lastScrollTime = 0
-  const throttleMs = 50
+  let lastContentLength = 0
+  const throttleMs = 200
   
   return () => {
     const now = Date.now()
     if (now - lastScrollTime < throttleMs) {
       return
     }
+    
+    const currentLength = currentDoc.value?.content?.length || 0
+    if (currentLength - lastContentLength < 50) {
+      return
+    }
+    
     lastScrollTime = now
+    lastContentLength = currentLength
     
     nextTick(() => {
       requestAnimationFrame(() => {
@@ -431,8 +439,9 @@ const scrollToEditorBottom = (() => {
           const scrollHeight = textarea.scrollHeight
           const clientHeight = textarea.clientHeight
           const currentScroll = textarea.scrollTop
+          const distanceToBottom = scrollHeight - currentScroll - clientHeight
           
-          if (scrollHeight - currentScroll > clientHeight * 0.5) {
+          if (distanceToBottom < clientHeight * 0.3) {
             textarea.scrollTop = scrollHeight
           }
         }
@@ -442,8 +451,9 @@ const scrollToEditorBottom = (() => {
           const scrollHeight = previewEl.scrollHeight
           const clientHeight = previewEl.clientHeight
           const currentScroll = previewEl.scrollTop
+          const distanceToBottom = scrollHeight - currentScroll - clientHeight
           
-          if (scrollHeight - currentScroll > clientHeight * 0.5) {
+          if (distanceToBottom < clientHeight * 0.3) {
             previewEl.scrollTop = scrollHeight
           }
         }

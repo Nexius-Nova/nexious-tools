@@ -57,9 +57,9 @@
               <div class="command-name">{{ item.name }}</div>
               <div class="command-desc" v-if="item.subtitle">{{ item.subtitle }}</div>
             </div>
-            <div class="command-shortcut" v-if="item.typeLabel">
+            <!-- <div class="command-shortcut" v-if="item.typeLabel">
               {{ item.typeLabel }}
-            </div>
+            </div> -->
           </div>
         </div>
 
@@ -528,10 +528,6 @@ onMounted(() => {
   color: var(--text-color);
 }
 
-.command-input::placeholder {
-  color: var(--text-color-4);
-}
-
 .command-list {
   max-height: 320px;
   overflow-y: auto;
@@ -587,13 +583,13 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-.command-shortcut {
+/* .command-shortcut {
   font-size: 11px;
   padding: 2px 8px;
   background: var(--bg-color);
   border-radius: 4px;
   color: var(--text-color-3);
-}
+} */
 
 .command-empty {
   padding: 32px;
