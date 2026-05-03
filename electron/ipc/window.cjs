@@ -1,4 +1,5 @@
 const { ipcMain, shell } = require("electron");
+const fs = require("fs");
 
 function registerWindowIpc(getMainWindow) {
   ipcMain.on("window-minimize", () => {
@@ -22,6 +23,12 @@ function registerWindowIpc(getMainWindow) {
 
   ipcMain.on("open-external", (event, url) => {
     shell.openExternal(url);
+  });
+
+  ipcMain.on("open-folder", (event, folderPath) => {
+    if (folderPath && fs.existsSync(folderPath)) {
+      shell.openPath(folderPath);
+    }
   });
 
   ipcMain.on("expand-window", () => {

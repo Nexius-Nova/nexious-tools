@@ -162,6 +162,9 @@
                     <n-icon v-else-if="item.type === 'document'" size="20"
                       ><DocumentOutline
                     /></n-icon>
+                    <n-icon v-else-if="item.type === 'local-folder'" size="20"
+                      ><FolderOutline
+                    /></n-icon>
                     <n-icon v-else-if="item.type === 'default-search'" size="20"
                       ><SearchOutline
                     /></n-icon>
@@ -261,7 +264,8 @@ import {
   CodeSlashOutline,
   EnterOutline,
   DocumentOutline,
-  GlobeOutline
+  GlobeOutline,
+  FolderOutline
 } from "@vicons/ionicons5";
 import TitleBar from "./components/TitleBar.vue";
 import Sidebar from "./components/Sidebar.vue";
@@ -346,6 +350,15 @@ const isValidUrl = (str) => {
   } catch {
     return false;
   }
+};
+
+const isValidLocalPath = (str) => {
+  if (!str || typeof str !== 'string') return false;
+  const trimmed = str.trim();
+  const windowsPathRegex = /^[a-zA-Z]:[/\\].+/;
+  if (!windowsPathRegex.test(trimmed)) return false;
+  const normalizedPath = trimmed.replace(/\//g, '\\');
+  return normalizedPath;
 };
 
 const normalizeUrl = (str) => {
@@ -471,7 +484,17 @@ const quickResults = computed(() => {
   });
 
   if (results.length === 0 && query) {
-    if (isValidUrl(query)) {
+    const localPath = isValidLocalPath(query);
+    if (localPath) {
+      results.push({
+        id: 'local-folder',
+        type: 'local-folder',
+        typeLabel: '文件夹',
+        name: `打开文件夹: ${localPath}`,
+        subtitle: localPath,
+        path: localPath
+      });
+    } else if (isValidUrl(query)) {
       results.push({
         id: 'direct-url',
         type: 'direct-url',
@@ -519,7 +542,9 @@ const updateWindowSize = () => {
 
 const handleQuickResultSelect = (item) => {
   quickSearchQuery.value = '';
-  if (item.type === 'direct-url' && item.url) {
+  if (item.type === 'local-folder' && item.path) {
+    window.electronAPI?.openFolder(item.path);
+  } else if (item.type === 'direct-url' && item.url) {
     window.electronAPI?.openExternal(item.url);
   } else if (item.type === 'default-search' && item.searchTerm) {
     const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(item.searchTerm)}`;

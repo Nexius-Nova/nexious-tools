@@ -48,6 +48,7 @@
               />
               <n-icon v-else-if="item.type === 'password'" size="18"><KeyOutline /></n-icon>
               <n-icon v-else-if="item.type === 'document'" size="18"><DocumentOutline /></n-icon>
+              <n-icon v-else-if="item.type === 'local-folder'" size="18"><FolderOutline /></n-icon>
               <n-icon v-else-if="item.type === 'default-search'" size="18"><SearchOutline /></n-icon>
               <n-icon v-else-if="item.type === 'direct-url'" size="18"><GlobeOutline /></n-icon>
               <n-icon v-else size="18"><CodeSlashOutline /></n-icon>
@@ -135,7 +136,7 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { NModal, NIcon, NTag, NDescriptions, NDescriptionsItem, NText, NButton, NSpace, NCode, NAvatar, useMessage } from 'naive-ui'
-import { SearchOutline, KeyOutline, CodeSlashOutline, DocumentOutline, GlobeOutline } from '@vicons/ionicons5'
+import { SearchOutline, KeyOutline, CodeSlashOutline, DocumentOutline, GlobeOutline, FolderOutline } from '@vicons/ionicons5'
 import { useTheme } from '../store/theme'
 import { useDataStore } from '../store/data'
 
@@ -195,6 +196,15 @@ const isValidUrl = (str) => {
   } catch {
     return false
   }
+}
+
+const isValidLocalPath = (str) => {
+  if (!str || typeof str !== 'string') return false
+  const trimmed = str.trim()
+  const windowsPathRegex = /^[a-zA-Z]:[/\\].+/
+  if (!windowsPathRegex.test(trimmed)) return false
+  const normalizedPath = trimmed.replace(/\//g, '\\')
+  return normalizedPath
 }
 
 const normalizeUrl = (str) => {
@@ -330,7 +340,17 @@ const filteredResults = computed(() => {
   })
   
   if (results.length === 0 && query) {
-    if (isValidUrl(query)) {
+    const localPath = isValidLocalPath(query)
+    if (localPath) {
+      results.push({
+        id: 'local-folder',
+        type: 'local-folder',
+        typeLabel: '文件夹',
+        name: `打开文件夹: ${localPath}`,
+        subtitle: localPath,
+        path: localPath
+      })
+    } else if (isValidUrl(query)) {
       results.push({
         id: 'direct-url',
         type: 'direct-url',
@@ -389,7 +409,11 @@ const handleKeydown = (e) => {
 
 const selectItem = async (item) => {
   searchQuery.value = ''
-  if (item.type === 'direct-url' && item.url) {
+  if (item.type === 'local-folder' && item.path) {
+    window.electronAPI?.openFolder(item.path)
+    emit('close')
+    showModal.value = false
+  } else if (item.type === 'direct-url' && item.url) {
     window.electronAPI?.openExternal(item.url)
     emit('close')
     showModal.value = false

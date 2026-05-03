@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
   closeWindow: () => ipcRenderer.send('window-close'),
   openExternal: (url) => ipcRenderer.send('open-external', url),
+  openFolder: (folderPath) => ipcRenderer.send('open-folder', folderPath),
   expandWindow: () => ipcRenderer.send('expand-window'),
   shrinkWindow: () => ipcRenderer.send('shrink-window'),
   resizeSearchWindow: (height) => ipcRenderer.send('resize-search-window', height),
