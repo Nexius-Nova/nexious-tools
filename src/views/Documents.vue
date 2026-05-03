@@ -201,6 +201,7 @@
                   :previewTheme="previewTheme"
                   :codeTheme="codeTheme"
                   :mdHeadingId="mdHeadingId"
+                  :sanitize="sanitizeHtml"
                   class="md-preview"
                 />
               </div>
@@ -266,6 +267,7 @@
                 :codeTheme="codeTheme"
                 :toolbars="editorToolbars"
                 :mdHeadingId="mdHeadingId"
+                :sanitize="sanitizeHtml"
                 class="md-editor"
                 @change="onContentChange"
                 @save="saveDoc"
@@ -323,6 +325,7 @@
             :theme="editorTheme"
             :previewTheme="previewTheme"
             :codeTheme="codeTheme"
+            :sanitize="sanitizeHtml"
             class="md-preview"
           />
         </div>
@@ -408,6 +411,15 @@ const isAiWorking = computed(() => formattingDoc.value || importingUrl.value)
 
 const mdHeadingId = ({ text, level, index }) => {
   return `heading-${index}-${level}-${text.replace(/\s+/g, '-').substring(0, 20)}`
+}
+
+const sanitizeHtml = (html) => {
+  return html.replace(/<img([^>]*)>/gi, (match, attrs) => {
+    if (attrs.includes('referrerpolicy=')) {
+      return match
+    }
+    return `<img${attrs} referrerpolicy="no-referrer">`
+  })
 }
 
 const scrollToEditorBottom = (() => {
