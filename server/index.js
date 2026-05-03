@@ -15,6 +15,7 @@ import docFoldersRouter from './routes/doc-folders.js'
 import uploadsRouter from './routes/uploads.js'
 import promptTemplatesRouter from './routes/prompt-templates.js'
 import { getUploadsPath, getRuntimeBasePath } from './utils/runtime-paths.js'
+import { errorHandler } from './middleware/errorHandler.js'
 
 let __dirname
 const metaUrl = import.meta.url
@@ -52,10 +53,7 @@ app.use('/api/doc-folders', docFoldersRouter)
 app.use('/api/uploads', uploadsRouter)
 app.use('/api/prompt-templates', promptTemplatesRouter)
 
-app.use((err, req, res, next) => {
-  console.error('Error:', err)
-  res.status(500).json({ error: err.message || '服务器内部错误' })
-})
+app.use(errorHandler)
 
 process.on('SIGINT', () => {
   closeDb()

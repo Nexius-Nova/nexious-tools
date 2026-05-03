@@ -533,6 +533,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, h, watch } from "vue";
+import { storeToRefs } from "pinia";
 import {
   NButton,
   NSpace,
@@ -582,12 +583,13 @@ import {
 import { websiteApi } from "../api/website";
 import WebsiteModal from "../components/WebsiteModal.vue";
 import SkeletonLoader from "../components/SkeletonLoader.vue";
-import { useData } from "../store/data";
+import { useDataStore } from "../store/data";
 
 const message = useMessage();
 const dialog = useDialog();
-const { websites, reloadWebsites, addWebsite, updateWebsite, removeWebsite, loading } =
-  useData();
+const dataStore = useDataStore();
+const { websites, loading } = storeToRefs(dataStore);
+const { reloadWebsites, addWebsite, updateWebsite, removeWebsite } = dataStore;
 
 const items = websites;
 const existingAppPaths = computed(() => {

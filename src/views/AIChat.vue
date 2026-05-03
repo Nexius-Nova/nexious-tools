@@ -743,6 +743,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted, h } from "vue";
+import { storeToRefs } from "pinia";
 import {
   NH2,
   NButton,
@@ -807,8 +808,9 @@ import { snippetApi } from "../api/snippet";
 import { documentApi } from "../api/documents";
 import { promptTemplateApi } from "../api/prompt-templates";
 import MessageContent from "../components/MessageContent.vue";
-import { useData } from "../store/data";
+import { useDataStore } from "../store/data";
 
+const dataStore = useDataStore();
 const {
   addSnippet,
   addDocument,
@@ -816,7 +818,7 @@ const {
   reloadSnippets,
   reloadDocuments,
   reloadWebsites
-} = useData();
+} = dataStore;
 
 const message = useMessage();
 const messages = ref([]);

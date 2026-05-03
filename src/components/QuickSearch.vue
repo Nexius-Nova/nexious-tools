@@ -132,16 +132,19 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { NModal, NIcon, NTag, NDescriptions, NDescriptionsItem, NText, NButton, NSpace, NCode, NAvatar, useMessage } from 'naive-ui'
 import { SearchOutline, KeyOutline, CodeSlashOutline, DocumentOutline, GlobeOutline } from '@vicons/ionicons5'
 import { useTheme } from '../store/theme'
-import { useData } from '../store/data'
+import { useDataStore } from '../store/data'
 
 const router = useRouter()
 const emit = defineEmits(['close', 'select'])
 const { isDarkMode } = useTheme()
-const { websites, passwords, snippets, documents, loadAllData } = useData()
+const dataStore = useDataStore()
+const { websites, passwords, snippets, documents } = storeToRefs(dataStore)
+const { loadAllData } = dataStore
 
 const message = useMessage()
 const showModal = ref(true)

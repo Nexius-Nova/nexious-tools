@@ -126,6 +126,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRoute } from 'vue-router'
 import { 
   NButton, 
@@ -155,12 +156,14 @@ import {
 } from '@vicons/ionicons5'
 import { passwordApi } from '../api/password'
 import PasswordModal from '../components/PasswordModal.vue'
-import { useData } from '../store/data'
+import { useDataStore } from '../store/data'
 
 const route = useRoute()
 const message = useMessage()
 const dialog = useDialog()
-const { passwords, websites, reloadPasswords, reloadWebsites, addPassword, updatePassword, removePassword } = useData()
+const dataStore = useDataStore()
+const { passwords, websites } = storeToRefs(dataStore)
+const { reloadPasswords, reloadWebsites, addPassword, updatePassword, removePassword } = dataStore
 
 const searchQuery = ref('')
 const showModal = ref(false)

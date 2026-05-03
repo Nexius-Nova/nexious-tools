@@ -237,6 +237,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
+import { storeToRefs } from "pinia";
 import { useRouter, useRoute } from "vue-router";
 import {
   NConfigProvider,
@@ -267,12 +268,14 @@ import Sidebar from "./components/Sidebar.vue";
 import QuickSearch from "./components/QuickSearch.vue";
 import { settingsApi } from "./api/settings";
 import { useTheme } from "./store/theme";
-import { useData } from "./store/data";
+import { useDataStore } from "./store/data";
 
 const router = useRouter();
 const route = useRoute();
 const { currentTheme, isDarkMode, themeOverrides, loadTheme } = useTheme();
-const { websites, passwords, snippets, documents, loadAllData } = useData();
+const dataStore = useDataStore();
+const { websites, passwords, snippets, documents } = storeToRefs(dataStore);
+const { loadAllData } = dataStore;
 
 const currentTab = ref("websites");
 const showQuickSearch = ref(false);

@@ -402,6 +402,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from "vue";
+import { storeToRefs } from "pinia";
 import { useRoute } from "vue-router";
 import {
   NButton,
@@ -439,12 +440,14 @@ import {
 } from "@vicons/ionicons5";
 import { snippetApi } from "../api/snippet";
 import MonacoEditor from "../components/MonacoEditor.vue";
-import { useData } from "../store/data";
+import { useDataStore } from "../store/data";
 
 const route = useRoute();
 const message = useMessage();
 const dialog = useDialog();
-const { snippets, reloadSnippets, addSnippet, updateSnippet, removeSnippet } = useData();
+const dataStore = useDataStore();
+const { snippets } = storeToRefs(dataStore);
+const { reloadSnippets, addSnippet, updateSnippet, removeSnippet } = dataStore;
 
 const categories = ref([]);
 const tags = ref([]);
