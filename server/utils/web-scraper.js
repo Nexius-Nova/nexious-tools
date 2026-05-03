@@ -418,7 +418,7 @@ export const convertToMarkdown = (scrapedData) => {
         case 'img':
           const localUrl = imageMap.get(item.src)
           if (localUrl) {
-            markdown += `![${item.alt || '图片'}](http://localhost:3000${localUrl})`
+            markdown += `![${item.alt || '图片'}](${localUrl})`
           }
           break
           
