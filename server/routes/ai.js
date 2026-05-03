@@ -618,6 +618,10 @@ router.post('/import-url', async (req, res) => {
                 .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
                 .replace(/<form[^>]*>[\s\S]*?<\/form>/gi, '')
                 .replace(/<!--[\s\S]*?-->/g, '')
+                .replace(/<div[^>]*class=["'][^"']*(nav|navigation|navbar|menu|sidebar|footer|header|copyright|beian|icp|备案|推荐|related|advertisement|ad-|ads-|banner|toolbar|breadcrumb|pagination)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, '')
+                .replace(/<div[^>]*id=["'][^"']*(nav|navigation|navbar|menu|sidebar|footer|header|copyright|beian|icp|备案|推荐|related|advertisement|ad-|ads-|banner|toolbar|breadcrumb|pagination)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, '')
+                .replace(/<section[^>]*class=["'][^"']*(nav|navigation|navbar|menu|sidebar|footer|header|copyright|beian|icp|备案|推荐|related|advertisement|ad-|ads-|banner|toolbar|breadcrumb|pagination)[^"']*["'][^>]*>[\s\S]*?<\/section>/gi, '')
+                .replace(/<ul[^>]*class=["'][^"']*(nav|navigation|navbar|menu|sidebar|footer|header|copyright|beian|icp|备案|推荐|related|advertisement|ad-|ads-|banner|toolbar|breadcrumb|pagination)[^"']*["'][^>]*>[\s\S]*?<\/ul>/gi, '')
               
               const imgReplacements = []
               let imgIndex = 0
@@ -690,33 +694,42 @@ router.post('/import-url', async (req, res) => {
    - 提取或生成合适的文档标题（使用 # 一级标题）
    - 根据内容层次使用二级、三级标题（## ###）
 
-2. **内容保留（非常重要）**：
-   - 100%保留原文内容，不添加、删除或修改任何实质性内容
+2. **内容清洗（非常重要）**：
+   - 必须去除所有与网页本身相关的信息：网站导航栏、网站logo、网站名称、作者信息、发布时间、阅读数、点赞数、评论数
+   - 必须去除所有网站备案信息（如ICP备案号、公安备案号等）
+   - 必须去除所有推荐文章、相关文章、热门文章等推荐内容
+   - 必须去除所有广告内容、推广信息
+   - 必须去除所有版权声明、转载声明（除非原文核心内容就是关于版权的）
+   - 必须去除所有"返回顶部"、"分享"、"收藏"等功能性文字
+   - 保留文章的正文内容、核心观点、技术细节、代码示例等实质性内容
+
+3. **内容保留**：
+   - 100%保留原文的实质性内容，不添加、删除或修改任何核心信息
    - 只调整格式和布局，不改变内容含义
    - 保持原文的段落结构和逻辑顺序
 
-3. **代码块处理**：
+4. **代码块处理**：
    - 识别代码片段，使用正确的代码块语法 \`\`\`语言名称 包裹
    - 自动检测代码语言并标注
 
-4. **列表格式**：
+5. **列表格式**：
    - 将列表内容转换为 Markdown 列表格式
    - 保持列表的层级关系
 
-5. **链接处理**：
+6. **链接处理**：
    - 保留原文中的链接，使用 [文字](URL) 格式
 
-6. **图片处理（非常重要）**：
+7. **图片处理（非常重要）**：
    - 网页中的图片会在内容末尾列出，格式为"图片N: URL"
    - 请将图片插入到文档中合适的位置（根据上下文判断）
    - 使用 Markdown 图片语法：\`![](图片URL)\` 或 \`![图片描述](图片URL)\`
    - 如果有图片占位符如 [图片1]、[图片2]，请将其替换为实际的图片语法
    - 绝对不要修改图片URL
 
-7. **表格格式**：
+8. **表格格式**：
    - 如果有表格数据，整理成标准 Markdown 表格格式
 
-8. **输出要求**：
+9. **输出要求**：
    - 直接输出 Markdown 内容，不要添加任何解释说明
    - 确保格式规范、可读性强
    - 如果内容很长，请完整输出所有内容，不要中途截断`

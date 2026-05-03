@@ -375,33 +375,49 @@ router.get('/:id', async (req, res) => {
   }
 })
 
+const generateUniqueTitle = async (title, folderId, excludeId = null) => {
+  const recordFolderId = folderId || null
+  let finalTitle = title
+  let counter = 1
+
+  while (true) {
+    const sql = excludeId
+      ? 'SELECT id FROM documents WHERE folder_id IS ? AND title = ? AND id != ?'
+      : 'SELECT id FROM documents WHERE folder_id IS ? AND title = ?'
+    const params = excludeId
+      ? [recordFolderId, finalTitle, excludeId]
+      : [recordFolderId, finalTitle]
+
+    const existing = await queryOne(sql, params)
+    if (!existing) {
+      break
+    }
+    finalTitle = `${title}(${counter})`
+    counter++
+  }
+
+  return finalTitle
+}
+
 router.post('/', async (req, res) => {
   try {
     const { title, content = '', content_type = 'markdown', folder_id, source_url, tags } = req.body
-    
+
     if (!title) {
       return res.status(400).json({ error: '标题不能为空' })
     }
-    
-    // 检查同一文件夹下 title 是否重复
+
     const recordFolderId = folder_id || null
-    const existing = await queryOne(
-      'SELECT id FROM documents WHERE folder_id IS ? AND title = ?',
-      [recordFolderId, title]
-    )
-    if (existing) {
-      const folderText = recordFolderId ? `文件夹ID ${recordFolderId}` : '根目录'
-      return res.status(400).json({ error: `${folderText}下已存在标题为"${title}"的文档` })
-    }
-    
+    const finalTitle = await generateUniqueTitle(title, recordFolderId)
+
     const wordCount = content ? content.length : 0
     const tagsJson = tags ? JSON.stringify(tags) : null
-    
+
     const result = await execute(
       'INSERT INTO documents (title, content, content_type, folder_id, source_url, tags, word_count) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [title, content, content_type, recordFolderId, source_url || null, tagsJson, wordCount]
+      [finalTitle, content, content_type, recordFolderId, source_url || null, tagsJson, wordCount]
     )
-    
+
     const newItem = await queryOne('SELECT * FROM documents WHERE id = ?', [result.lastInsertRowid])
     res.json({ data: newItem })
   } catch (error) {
@@ -413,34 +429,24 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { title, content, content_type, folder_id, source_url, tags, is_favorite } = req.body
-    
-    // 如果更新了 title 或 folder_id，检查唯一性
-    if (title !== undefined || folder_id !== undefined) {
-      // 获取当前记录
-      const current = await queryOne('SELECT title, folder_id FROM documents WHERE id = ?', [req.params.id])
-      if (!current) {
-        return res.status(404).json({ error: '文档不存在' })
-      }
-      
-      const checkTitle = title !== undefined ? title : current.title
+
+    const current = await queryOne('SELECT title, folder_id FROM documents WHERE id = ?', [req.params.id])
+    if (!current) {
+      return res.status(404).json({ error: '文档不存在' })
+    }
+
+    let finalTitle = title
+    if (title !== undefined && title !== current.title) {
       const checkFolderId = folder_id !== undefined ? (folder_id || null) : current.folder_id
-      
-      const existing = await queryOne(
-        'SELECT id FROM documents WHERE folder_id IS ? AND title = ? AND id != ?',
-        [checkFolderId, checkTitle, req.params.id]
-      )
-      if (existing) {
-        const folderText = checkFolderId ? `文件夹ID ${checkFolderId}` : '根目录'
-        return res.status(400).json({ error: `${folderText}下已存在标题为"${checkTitle}"的文档` })
-      }
+      finalTitle = await generateUniqueTitle(title, checkFolderId, req.params.id)
     }
     
     const fields = []
     const values = []
     
-    if (title !== undefined) {
+    if (finalTitle !== undefined) {
       fields.push('title = ?')
-      values.push(title)
+      values.push(finalTitle)
     }
     if (content !== undefined) {
       fields.push('content = ?')
