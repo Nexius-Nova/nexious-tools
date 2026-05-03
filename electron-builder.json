@@ -6,7 +6,9 @@
     "output": "release"
   },
   "files": [
-    "**/*"
+    "**/*",
+    "!**/demo/**/*",
+    "!demo"
   ],
   "extraResources": [
     {
