@@ -36,7 +36,6 @@
     "naive-ui": "^2.44.1",
     "pdf-parse": "^2.4.5",
     "pinia": "^2.1.7",
-    "puppeteer-core": "^24.42.0",
     "sql.js": "^1.14.1",
     "vue": "^3.4.21",
     "vue-router": "^4.3.0",

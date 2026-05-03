@@ -1,7 +1,7 @@
 import express from 'express'
 import { query, queryOne, execute } from '../db.js'
 import { getDefaultAiModel, getProviderConfig } from '../ai-utils.js'
-import { scrapeWebpageAdvanced, convertToMarkdown } from '../utils/advanced-scraper.js'
+import { scrapeWebpage, convertToMarkdown } from '../utils/web-scraper.js'
 
 const router = express.Router()
 
@@ -520,7 +520,7 @@ ${content}`
 })
 
 router.post('/import-url', async (req, res) => {
-  const { url, stream = true, continueFrom = null, usePuppeteer = false } = req.body
+  const { url, stream = true, continueFrom = null } = req.body
   
   if (!url) {
     return res.status(400).json({ error: 'URL不能为空' })
@@ -546,9 +546,8 @@ router.post('/import-url', async (req, res) => {
     
     if (!continueFrom) {
       try {
-        const scrapedData = await scrapeWebpageAdvanced(url, {
-          usePuppeteer,
-          timeout: 60000,
+        const scrapedData = await scrapeWebpage(url, {
+          timeout: 30000,
           downloadImages: true,
           maxImages: 20
         })
