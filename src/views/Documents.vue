@@ -244,6 +244,18 @@
                   style="flex: 1"
                   :disabled="isAiWorking"
                 />
+                <n-tooltip trigger="hover">
+                  <template #trigger>
+                    <n-checkbox 
+                      v-model:checked="usePuppeteerMode"
+                      :disabled="importingUrl"
+                      style="margin-left: 8px;"
+                    >
+                      反爬模式
+                    </n-checkbox>
+                  </template>
+                  启用浏览器模式，可处理有反爬保护的网站（需要安装Chrome）
+                </n-tooltip>
                 <n-button 
                   type="primary" 
                   size="small" 
@@ -403,6 +415,7 @@ const showCatalog = ref(true)
 const previewId = 'doc-preview'
 const formattingDoc = ref(false)
 const importingUrl = ref(false)
+const usePuppeteerMode = ref(false)
 const previewScrollEl = ref(null)
 const editorRef = ref(null)
 const aiAbortController = ref(null)
@@ -1064,7 +1077,8 @@ const importFromUrl = async () => {
         body: JSON.stringify({
           url: currentDoc.value.source_url,
           stream: true,
-          continueFrom: continueFrom
+          continueFrom: continueFrom,
+          usePuppeteer: usePuppeteerMode.value
         }),
         signal: aiAbortController.value.signal
       })
