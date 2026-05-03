@@ -85,63 +85,57 @@
     </div>
 
     <div
-      class="results-container"
+      class="command-list"
       v-if="isInputFocused && quickResults.length > 0"
-      :class="{ 'dark-mode': isDarkMode }"
       ref="resultsContainerRef"
     >
       <div
         v-for="(item, index) in quickResults"
         :key="item.type + '-' + item.id"
         :ref="el => resultItemRefs[index] = el"
-        :class="[
-          'result-item',
-          { selected: index === selectedResultIndex }
-        ]"
+        :class="['command-item', { selected: index === selectedResultIndex }]"
         @click="handleQuickResultSelect(item)"
         @mousedown.prevent
         @mouseenter="selectedResultIndex = index"
       >
-        <div class="result-icon">
+        <div class="command-icon">
           <n-avatar
-            v-if="item.type === 'website'"
+            v-if="item.type === 'website' || item.type === 'bookmark'"
             :src="item.favicon"
-            :size="28"
+            :size="18"
             round
-          >
-          </n-avatar>
+          />
           <n-avatar
             v-else-if="item.type === 'app'"
             :src="item.favicon"
-            :size="28"
+            :size="18"
             round
-          >
-          </n-avatar>
-          <n-icon v-else-if="item.type === 'password'" size="20"
-            ><KeyOutline
-          /></n-icon>
-          <n-icon v-else-if="item.type === 'document'" size="20"
-            ><DocumentOutline
-          /></n-icon>
-          <n-icon v-else-if="item.type === 'local-folder'" size="20"
-            ><FolderOutline
-          /></n-icon>
-          <n-icon v-else-if="item.type === 'default-search'" size="20"
-            ><SearchOutline
-          /></n-icon>
-          <n-icon v-else-if="item.type === 'direct-url'" size="20"
-            ><GlobeOutline
-          /></n-icon>
-          <n-icon v-else size="20"><CodeSlashOutline /></n-icon>
+          />
+          <n-icon v-else-if="item.type === 'password'" size="18"><KeyOutline /></n-icon>
+          <n-icon v-else-if="item.type === 'document'" size="18"><DocumentOutline /></n-icon>
+          <n-icon v-else-if="item.type === 'local-folder'" size="18"><FolderOutline /></n-icon>
+          <n-icon v-else-if="item.type === 'default-search'" size="18"><SearchOutline /></n-icon>
+          <n-icon v-else-if="item.type === 'direct-url'" size="18"><GlobeOutline /></n-icon>
+          <n-icon v-else size="18"><CodeSlashOutline /></n-icon>
         </div>
-        <div class="result-info">
-          <div class="result-name">{{ item.name }}</div>
+        <div class="command-content">
+          <div class="command-name">{{ item.name }}</div>
+          <div class="command-desc" v-if="item.subtitle">{{ item.subtitle }}</div>
         </div>
-        <div class="result-action">
-          <span class="result-subtitle">{{ item.subtitle }}</span>
-          <n-icon size="14"><EnterOutline /></n-icon>
+        <div class="command-shortcut" v-if="item.typeLabel">
+          {{ item.typeLabel }}
         </div>
       </div>
+    </div>
+
+    <div class="command-empty" v-else-if="isInputFocused && quickSearchQuery && quickResults.length === 0">
+      <n-text depth="3">未找到匹配的结果</n-text>
+    </div>
+
+    <div class="command-footer" v-if="isInputFocused">
+      <span><kbd>↑</kbd><kbd>↓</kbd> 导航</span>
+      <span><kbd>Enter</kbd> 打开</span>
+      <span><kbd>Esc</kbd> 关闭</span>
     </div>
   </div>
 </template>
@@ -153,7 +147,8 @@ import {
   NInput,
   NButton,
   NIcon,
-  NAvatar
+  NAvatar,
+  NText
 } from "naive-ui";
 import {
   SearchOutline,
@@ -585,106 +580,101 @@ defineExpose({
   background: rgba(255, 255, 255, 0.1);
 }
 
-.results-container {
+.command-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px;
   background: rgba(255, 255, 255, 0.98);
   border-bottom-left-radius: 10px;
   border-bottom-right-radius: 10px;
-  overflow-y: auto;
-  max-height: 320px;
-  transition: background 0.3s, box-shadow 0.3s;
 }
 
-.results-container.dark-mode {
-  background: rgba(30, 30, 30, 0.98);
-}
-
-.result-item {
+.command-item {
   display: flex;
   align-items: center;
-  padding: 10px 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
   cursor: pointer;
+  transition: background 0.15s;
 }
 
-.result-item.selected,
-.result-item:hover {
-  background-color: rgba(102, 126, 234, 0.1);
+.command-item:hover,
+.command-item.selected {
+  background: var(--primary-light);
 }
 
-.results-container.dark-mode .result-item.selected,
-.results-container.dark-mode .result-item:hover {
-  background-color: rgba(102, 126, 234, 0.2);
-}
-
-.result-icon {
-  width: 36px;
-  height: 36px;
+.command-icon {
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(102, 126, 234, 0.1);
   border-radius: 8px;
+  background: var(--bg-color);
   margin-right: 12px;
-  color: #667eea;
-  flex-shrink: 0;
+  color: var(--primary-color);
 }
 
-.results-container.dark-mode .result-icon {
-  background: rgba(102, 126, 234, 0.2);
-  color: #8b9cf5;
-}
-
-.result-info {
+.command-content {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  max-width: calc(100% - 120px);
 }
 
-.result-name {
+.command-name {
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-primary);
-  margin-bottom: 2px;
+  color: var(--text-color);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
 }
 
-.results-container.dark-mode .result-name {
-  color: #ffffff;
-}
-
-.result-subtitle {
+.command-desc {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-color-3);
+  margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 150px;
 }
 
-.results-container.dark-mode .result-subtitle {
-  color: rgba(255, 255, 255, 0.5);
+.command-shortcut {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: var(--bg-color);
+  border-radius: 4px;
+  color: var(--text-color-3);
 }
 
-.result-action {
+.command-empty {
+  padding: 32px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.98);
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+}
+
+.command-footer {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px;
+  border-top: 1px solid var(--border-color);
   font-size: 12px;
-  color: var(--text-muted);
-  margin-left: 8px;
-  white-space: nowrap;
+  color: var(--text-color-4);
+  background: rgba(255, 255, 255, 0.98);
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
 }
 
-.results-container.dark-mode .result-action {
-  color: rgba(255, 255, 255, 0.3);
-}
-
-.result-item.selected .result-action {
-  color: var(--primary-color);
-}
-
-.results-container.dark-mode .result-item.selected .result-action {
-  color: var(--primary-color);
+.command-footer kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  background: var(--bg-color);
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 11px;
+  margin-right: 4px;
 }
 
 @media (max-width: 768px) {
@@ -693,13 +683,13 @@ defineExpose({
     --n-font-size: 14px;
   }
   
-  .result-item {
+  .command-item {
     padding: 8px 12px;
   }
   
-  .result-icon {
-    width: 32px;
-    height: 32px;
+  .command-icon {
+    width: 28px;
+    height: 28px;
     margin-right: 10px;
   }
 }
