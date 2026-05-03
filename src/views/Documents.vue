@@ -854,7 +854,7 @@ const saveDoc = async () => {
       await documentApi.update(currentDoc.value.id, docData)
     } else {
       const res = await documentApi.create(docData)
-      const newId = res.data?.data?.id || res.data?.data?.lastInsertRowid || res.data?.id
+      const newId = res.data?.data?.id
       if (newId) {
         currentDoc.value.id = newId
       }
