@@ -27,9 +27,17 @@ if (metaUrl && metaUrl !== '') {
 
 const router = express.Router()
 
-const tempDir = process.env.RESOURCES_PATH 
-  ? path.join(process.env.RESOURCES_PATH, 'temp')
-  : path.resolve(__dirname, '..', 'temp')
+const getTempDir = () => {
+  if (process.env.APP_DATA_DIR) {
+    return path.join(process.env.APP_DATA_DIR, 'temp')
+  }
+  if (process.env.RESOURCES_PATH) {
+    return path.join(process.env.RESOURCES_PATH, 'temp')
+  }
+  return path.resolve(__dirname, '..', 'temp')
+}
+
+const tempDir = getTempDir()
 
 if (!fs.existsSync(tempDir)) {
   fs.mkdirSync(tempDir, { recursive: true })

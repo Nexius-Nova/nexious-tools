@@ -5,6 +5,14 @@ import fs from 'fs'
 import crypto from 'crypto'
 
 const getUploadsDir = () => {
+  if (process.env.APP_DATA_DIR) {
+    const baseDir = path.join(process.env.APP_DATA_DIR, 'uploads')
+    if (!fs.existsSync(baseDir)) {
+      fs.mkdirSync(baseDir, { recursive: true })
+    }
+    return baseDir
+  }
+  
   const baseDir = process.env.RESOURCES_PATH 
     ? path.join(process.env.RESOURCES_PATH, 'uploads')
     : path.resolve(process.cwd(), 'server', 'uploads')
