@@ -1,6 +1,6 @@
 {
   "name": "nexious-tools",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "桌面端工具集 - 网站链接管理、密码管理、代码片段管理",
   "main": "electron/main.cjs",
   "author": "Nexious",

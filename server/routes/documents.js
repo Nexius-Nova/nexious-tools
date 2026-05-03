@@ -8,18 +8,20 @@ import { createRequire } from 'module'
 import mammoth from 'mammoth'
 import * as XLSX from 'xlsx'
 
-const require = createRequire(import.meta.url)
-
+let require
 let __dirname
 const metaUrl = import.meta.url
 if (metaUrl && metaUrl !== '') {
   try {
+    require = createRequire(metaUrl)
     const __filename = fileURLToPath(metaUrl)
     __dirname = path.dirname(__filename)
   } catch (e) {
+    require = createRequire(process.cwd() + '/')
     __dirname = process.cwd()
   }
 } else {
+  require = createRequire(process.cwd() + '/')
   __dirname = process.cwd()
 }
 
