@@ -1,6 +1,7 @@
 import express from 'express'
 import { query, queryOne, execute } from '../db.js'
 import { getDefaultAiModel, getProviderConfig } from '../ai-utils.js'
+import { scrapeWebpageAdvanced, convertToMarkdown } from '../utils/advanced-scraper.js'
 
 const router = express.Router()
 
@@ -519,7 +520,7 @@ ${content}`
 })
 
 router.post('/import-url', async (req, res) => {
-  const { url, stream = true, continueFrom = null } = req.body
+  const { url, stream = true, continueFrom = null, usePuppeteer = false } = req.body
   
   if (!url) {
     return res.status(400).json({ error: 'URL不能为空' })
@@ -545,137 +546,19 @@ router.post('/import-url', async (req, res) => {
     
     if (!continueFrom) {
       try {
-        const userAgents = [
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        ]
+        const scrapedData = await scrapeWebpageAdvanced(url, {
+          usePuppeteer,
+          timeout: 60000,
+          downloadImages: true,
+          maxImages: 20
+        })
         
-        let lastError = null
+        webpageTitle = scrapedData.title
+        webpageContent = convertToMarkdown(scrapedData)
         
-        for (let i = 0; i < userAgents.length; i++) {
-          try {
-            const headers = {
-              'User-Agent': userAgents[i],
-              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-              'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache',
-              'Connection': 'keep-alive'
-            }
-            
-            if (i > 0) {
-              await new Promise(resolve => setTimeout(resolve, 500))
-            }
-            
-            const webpageRes = await fetchWithTimeout(url, {
-              method: 'GET',
-              headers,
-              redirect: 'follow'
-            }, 30000)
-            
-            if (webpageRes.ok) {
-              const html = await webpageRes.text()
-              
-              const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-              webpageTitle = titleMatch ? titleMatch[1].trim() : ''
-              
-              const imgMatches = html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)
-              const images = []
-              const baseUrl = url
-              
-              for (const match of imgMatches) {
-                let imgUrl = match[1]
-                if (imgUrl.startsWith('//')) {
-                  imgUrl = 'https:' + imgUrl
-                } else if (imgUrl.startsWith('/')) {
-                  try {
-                    const urlObj = new URL(baseUrl)
-                    imgUrl = `${urlObj.protocol}//${urlObj.host}${imgUrl}`
-                  } catch (e) {
-                    continue
-                  }
-                } else if (!imgUrl.startsWith('http')) {
-                  try {
-                    imgUrl = new URL(imgUrl, baseUrl).href
-                  } catch (e) {
-                    continue
-                  }
-                }
-                
-                if (!images.includes(imgUrl)) {
-                  images.push(imgUrl)
-                }
-              }
-              
-              let text = html
-                .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-                .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
-                .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
-                .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
-                .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
-                .replace(/<form[^>]*>[\s\S]*?<\/form>/gi, '')
-                .replace(/<!--[\s\S]*?-->/g, '')
-                .replace(/<div[^>]*class=["'][^"']*(nav|navigation|navbar|menu|sidebar|footer|header|copyright|beian|icp|备案|推荐|related|advertisement|ad-|ads-|banner|toolbar|breadcrumb|pagination)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, '')
-                .replace(/<div[^>]*id=["'][^"']*(nav|navigation|navbar|menu|sidebar|footer|header|copyright|beian|icp|备案|推荐|related|advertisement|ad-|ads-|banner|toolbar|breadcrumb|pagination)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, '')
-                .replace(/<section[^>]*class=["'][^"']*(nav|navigation|navbar|menu|sidebar|footer|header|copyright|beian|icp|备案|推荐|related|advertisement|ad-|ads-|banner|toolbar|breadcrumb|pagination)[^"']*["'][^>]*>[\s\S]*?<\/section>/gi, '')
-                .replace(/<ul[^>]*class=["'][^"']*(nav|navigation|navbar|menu|sidebar|footer|header|copyright|beian|icp|备案|推荐|related|advertisement|ad-|ads-|banner|toolbar|breadcrumb|pagination)[^"']*["'][^>]*>[\s\S]*?<\/ul>/gi, '')
-              
-              const imgReplacements = []
-              let imgIndex = 0
-              text = text.replace(/<img[^>]+src=["']([^"']+)["'][^>]*alt=["']([^"']*)["'][^>]*>/gi, (match, src, alt) => {
-                imgIndex++
-                imgReplacements.push(`[图片${imgIndex}${alt ? `: ${alt}` : ''}]`)
-                return ` [图片${imgIndex}${alt ? `: ${alt}` : ''}] `
-              })
-              text = text.replace(/<img[^>]+alt=["']([^"']*)["'][^>]+src=["']([^"']+)["'][^>]*>/gi, (match, alt, src) => {
-                imgIndex++
-                imgReplacements.push(`[图片${imgIndex}${alt ? `: ${alt}` : ''}]`)
-                return ` [图片${imgIndex}${alt ? `: ${alt}` : ''}] `
-              })
-              text = text.replace(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi, (match, src) => {
-                imgIndex++
-                imgReplacements.push(`[图片${imgIndex}]`)
-                return ` [图片${imgIndex}] `
-              })
-              
-              text = text
-                .replace(/<[^>]+>/g, ' ')
-                .replace(/\s+/g, ' ')
-                .replace(/&nbsp;/g, ' ')
-                .replace(/&amp;/g, '&')
-                .replace(/&lt;/g, '<')
-                .replace(/&gt;/g, '>')
-                .replace(/&quot;/g, '"')
-                .replace(/&#39;/g, "'")
-                .trim()
-              
-              if (images.length > 0) {
-                text += '\n\n--- 网页图片 ---\n'
-                images.forEach((imgUrl, idx) => {
-                  text += `图片${idx + 1}: ${imgUrl}\n`
-                })
-              }
-              
-              const maxLen = 30000
-              if (text.length > maxLen) {
-                text = text.substring(0, maxLen) + '...(内容过长已截断)'
-              }
-              
-              webpageContent = text
-              break
-            } else {
-              lastError = new Error(`HTTP ${webpageRes.status}`)
-            }
-          } catch (e) {
-            lastError = e
-          }
-        }
-        
-        if (!webpageContent && lastError) {
-          throw new Error(`无法访问网页，该网站可能有反爬虫保护。建议：1. 尝试其他网站 2. 手动复制网页内容`)
+        const maxLen = 30000
+        if (webpageContent.length > maxLen) {
+          webpageContent = webpageContent.substring(0, maxLen) + '\n\n...(内容过长已截断)'
         }
       } catch (fetchError) {
         return res.status(400).json({ error: `无法获取网页内容: ${fetchError.message}` })
