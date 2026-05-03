@@ -104,7 +104,7 @@ const downloadImage = async (imgUrl, uploadsDir, retries = 3) => {
       fs.writeFileSync(filePath, Buffer.from(response.data, 'binary'))
       
       const relativePath = path.relative(uploadsDir, filePath)
-      const localUrl = `/api/uploads/${relativePath.replace(/\\/g, '/')}`
+      const localUrl = `http://localhost:3000/api/uploads/${relativePath.replace(/\\/g, '/')}`
       
       return localUrl
     } catch (error) {
@@ -427,6 +427,8 @@ export const convertToMarkdown = (scrapedData) => {
           const localUrl = imageMap.get(item.src)
           if (localUrl) {
             markdown += `![${item.alt || '图片'}](${localUrl})`
+          } else {
+            markdown += `![${item.alt || '图片'}](${item.src})`
           }
           break
           
