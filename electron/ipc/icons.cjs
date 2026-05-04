@@ -19,7 +19,7 @@ try {
 }
 
 const iconCache = new Map();
-const ICON_BATCH_SIZE = 30;
+const ICON_CONCURRENCY = 5;
 
 let iconCachePath = null;
 
@@ -130,7 +130,7 @@ function extractIcon(iconPath) {
     const timeout = setTimeout(() => {
       child.kill();
       resolve(null);
-    }, 2000);
+    }, 5000);
 
     child.on("close", (code) => {
       clearTimeout(timeout);
@@ -182,7 +182,7 @@ function extractIconWithExtractor(iconPath) {
       iconExtractor.emitter.removeListener("icon", handler);
       iconExtractor.emitter.removeListener("error", errorHandler);
       resolve(null);
-    }, 1000);
+    }, 5000);
 
     const handler = (data) => {
       if (data.Context === cleanPath) {
@@ -210,7 +210,7 @@ function extractIconWithExtractor(iconPath) {
   });
 }
 
-async function getCachedIcon(iconPath) {
+async function getCachedIcon(iconPath, storeAppInfo = null) {
   if (!iconPath || typeof iconPath !== "string") {
     return null;
   }
@@ -225,6 +225,51 @@ async function getCachedIcon(iconPath) {
     return null;
   }
 
+  if (cleanPath.startsWith("shell:AppsFolder\\")) {
+    if (storeAppInfo && storeAppInfo.installLocation) {
+      const installLocation = storeAppInfo.installLocation;
+      const logoRelative = storeAppInfo.logo || "";
+      
+      const possibleLogoPaths = [];
+      
+      if (logoRelative) {
+        possibleLogoPaths.push(
+          path.join(installLocation, logoRelative),
+          path.join(installLocation, logoRelative.replace(/\.png$/i, ".scale-100.png")),
+          path.join(installLocation, logoRelative.replace(/\.png$/i, ".scale-125.png")),
+          path.join(installLocation, logoRelative.replace(/\.png$/i, ".scale-150.png")),
+          path.join(installLocation, logoRelative.replace(/\.png$/i, ".scale-200.png")),
+          path.join(installLocation, logoRelative.replace(/\.png$/i, ".scale-400.png"))
+        );
+      }
+      
+      possibleLogoPaths.push(
+        path.join(installLocation, "Assets", "Square44x44Logo.png"),
+        path.join(installLocation, "Assets", "Square44x44Logo.targetsize-44.png"),
+        path.join(installLocation, "Assets", "Square150x150Logo.png"),
+        path.join(installLocation, "Assets", "Logo.png"),
+        path.join(installLocation, "Assets", "StoreLogo.png"),
+        path.join(installLocation, "icon.png"),
+        path.join(installLocation, "Icon.png")
+      );
+      
+      for (const logoPath of possibleLogoPaths) {
+        if (fs.existsSync(logoPath)) {
+          try {
+            const imageBuffer = fs.readFileSync(logoPath);
+            const ext = path.extname(logoPath).toLowerCase();
+            const mimeType = ext === ".jpg" ? "jpeg" : ext.slice(1);
+            const base64 = `data:image/${mimeType};base64,${imageBuffer.toString("base64")}`;
+            return base64;
+          } catch (e) {
+            continue;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
   if (iconCache.has(cleanPath)) {
     return iconCache.get(cleanPath);
   }
@@ -233,7 +278,7 @@ async function getCachedIcon(iconPath) {
     (await extractIconWithExtractor(cleanPath)) ||
     (await extractIcon(cleanPath)) ||
     null;
-  
+
   if (iconBase64) {
     iconCache.set(cleanPath, iconBase64);
     saveIconCache();
@@ -278,22 +323,31 @@ function registerIconsIpc() {
     }
   });
 
-  ipcMain.handle("get-app-icons", async (event, appPaths = []) => {
+  ipcMain.handle("get-app-icons", async (event, apps = []) => {
     try {
       if (
         process.platform !== "win32" ||
-        !Array.isArray(appPaths) ||
-        appPaths.length === 0
+        !Array.isArray(apps) ||
+        apps.length === 0
       ) {
         return {};
       }
 
-      const uniquePaths = [...new Set(appPaths.filter(Boolean))];
+      const isPathArray = typeof apps[0] === "string";
+      const appList = isPathArray
+        ? apps.filter(Boolean).map((p) => ({ path: p }))
+        : apps.filter((a) => a && a.path);
+
       const icons = await mapWithConcurrency(
-        uniquePaths,
-        ICON_BATCH_SIZE,
-        async (appPath) => {
-          const icon = await getCachedIcon(appPath);
+        appList,
+        ICON_CONCURRENCY,
+        async (app) => {
+          const appPath = app.path;
+          const storeAppInfo =
+            app.source === "microsoftstore"
+              ? { installLocation: app.installLocation, logo: app.logo }
+              : null;
+          const icon = await getCachedIcon(appPath, storeAppInfo);
           return [appPath, icon || ""];
         }
       );

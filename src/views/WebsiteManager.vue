@@ -86,13 +86,6 @@
           v-for="(item, index) in displayedItems"
           :key="item.id"
           class="card-grid-item"
-          draggable="true"
-          @dragstart="handleDragStart($event, index)"
-          @dragover.prevent="handleDragOver($event, index)"
-          @dragleave="handleDragLeave"
-          @drop.prevent="handleDrop($event, index)"
-          @dragend="handleDragEnd"
-          :class="{ 'dragging': dragIndex === index, 'drag-over': dragOverIndex === index }"
         >
           <n-card hoverable class="website-card">
           <template #header>
@@ -332,9 +325,10 @@
               </div>
               <div class="app-card-icon">
                 <img
-                  v-if="app.icon && !app.iconError"
-                  :src="app.icon"
+                  v-if="getAppIcon(app) && !app.iconError"
+                  :src="getAppIcon(app)"
                   class="app-icon-img"
+                  loading="lazy"
                   @error="app.iconError = true"
                 />
                 <div v-else class="app-icon-fallback">
@@ -376,7 +370,8 @@
             <n-icon size="16" style="vertical-align: -2px; margin-right: 4px"
               ><InformationCircleOutline
             /></n-icon>
-            点击应用卡片或复选框进行选择
+            <span v-if="appIconsLoading">正在加载图标...</span>
+            <span v-else>点击应用卡片或复选框进行选择</span>
           </n-text>
           <n-space :size="12">
             <n-button @click="showPreviewModal = false">取消</n-button>
@@ -384,7 +379,7 @@
               type="primary"
               @click="importSelectedApps"
               :loading="importing"
-              :disabled="selectedApps.length === 0"
+              :disabled="selectedApps.length === 0 || appIconsLoading"
             >
               <template #icon>
                 <n-icon><CloudDownloadOutline /></n-icon>
@@ -532,7 +527,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, h, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, h, watch, nextTick } from "vue";
 import { storeToRefs } from "pinia";
 import {
   NButton,
@@ -619,7 +614,8 @@ const appSourceFilter = ref(null);
 const appSourceOptions = [
   { label: "桌面快捷方式", value: "desktop" },
   { label: "开始菜单", value: "startmenu" },
-  { label: "注册表", value: "registry" }
+  { label: "注册表", value: "registry" },
+  { label: "Microsoft Store", value: "microsoftstore" }
 ];
 const importingBookmarks = ref(false);
 const showBookmarkModal = ref(false);
@@ -628,7 +624,6 @@ const selectedBookmarks = ref([]);
 const bookmarkSearchQuery = ref("");
 const availableBrowsers = ref([]);
 const showBrowserDropdown = ref(false);
-const dragIndex = ref(-1);
 
 const browserOptions = computed(() => {
   const options = availableBrowsers.value.map(b => ({
@@ -641,7 +636,6 @@ const browserOptions = computed(() => {
   });
   return options;
 });
-const dragOverIndex = ref(-1);
 const pageSize = ref(50);
 const loadingMore = ref(false);
 const cardContainerRef = ref(null);
@@ -709,36 +703,64 @@ const filteredScannedApps = computed(() => {
   return result;
 });
 
-const loadAppIcons = async (apps, batchSize = 30) => {
+const appIconMap = ref(new Map());
+const appIconsLoading = ref(false);
+
+const loadAppIcons = async (apps, batchSize = 20) => {
   if (!apps || apps.length === 0 || !window.electronAPI?.getAppIcons) {
     return;
   }
 
-  const allPaths = apps.map((app) => app.path).filter(Boolean);
-  const totalBatches = Math.ceil(allPaths.length / batchSize);
-  
+  const appsToLoad = apps.filter((app) => app.path && !appIconMap.value.has(app.path));
+  if (appsToLoad.length === 0) return;
+
+  const totalBatches = Math.ceil(appsToLoad.length / batchSize);
+  appIconsLoading.value = true;
+
   for (let i = 0; i < totalBatches; i++) {
-    const batchPaths = allPaths.slice(i * batchSize, (i + 1) * batchSize);
-    
+    const batchApps = appsToLoad.slice(i * batchSize, (i + 1) * batchSize);
+    const plainApps = batchApps.map(app => ({
+      path: app.path,
+      source: app.source,
+      installLocation: app.installLocation,
+      logo: app.logo
+    }));
+
     try {
-      const iconMap = await window.electronAPI.getAppIcons(batchPaths);
-      scannedApps.value = scannedApps.value.map((app) => ({
-        ...app,
-        icon: app.icon || iconMap?.[app.path] || ""
-      }));
+      const iconMap = await window.electronAPI.getAppIcons(plainApps);
+      if (iconMap) {
+        for (const [appPath, iconData] of Object.entries(iconMap)) {
+          if (iconData) {
+            appIconMap.value.set(appPath, iconData);
+          }
+        }
+      }
     } catch (error) {
       console.error(`加载第 ${i + 1} 批图标失败:`, error);
     }
+
+    if (i < totalBatches - 1) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
   }
+
+  appIconsLoading.value = false;
+};
+
+const getAppIcon = (app) => {
+  if (app.path && appIconMap.value.has(app.path)) {
+    return appIconMap.value.get(app.path);
+  }
+  return "";
 };
 
 const getSourceLabel = (source) => {
-  const map = { desktop: "桌面", startmenu: "开始菜单", registry: "注册表" };
+  const map = { desktop: "桌面", startmenu: "开始菜单", registry: "注册表", microsoftstore: "MS Store" };
   return map[source] || source || "未知";
 };
 
 const getSourceTagType = (source) => {
-  const map = { desktop: "info", startmenu: "success", registry: "warning" };
+  const map = { desktop: "info", startmenu: "success", registry: "warning", microsoftstore: "error" };
   return map[source] || "default";
 };
 
@@ -788,54 +810,100 @@ const toggleAppSelection = (app) => {
   }
 };
 
+const APP_FILTER_KEYWORDS = [
+  'update', 'updater', 'patch', 'hotfix', 'fix', 'repair', 'rollup',
+  'crash', 'crashreporter', 'crash handler', 'error report', 'error reporting',
+  'helper', 'assistant', 'service', 'daemon', 'agent', 'server',
+  'runtime', 'framework', 'sdk', 'development kit', 'redistributable',
+  'merge module', 'compatibility', 'telemetry',
+  'setup', 'installer', 'bootstrap', 'deploy', 'configuration',
+  'driver', 'codec', 'plugin', 'extension pack', 'add-in', 'addin',
+  'debug', 'test', 'demo', 'sample', 'example', 'trial',
+  'readme', 'license', 'eula', 'documentation', 'manual', 'guide',
+  'toolkit', 'workbench', 'utility', 'wizard', 'config', 'settings',
+  'send to', '发送至', '打印', 'print', '传真', 'fax',
+  '卸载', 'uninstall', 'remove', 'remover',
+  '语言首选项', 'language preference', '输入法', 'ime',
+  '关于', 'about', '帮助', 'help', '支持', 'support',
+  '恢复', 'recovery', '还原', 'restore', '备份', 'backup',
+  '同步', 'sync', '云', 'cloud',
+  '诊断', 'diagnostic', '修复', 'fix',
+  '组件', 'component', '模块', 'module',
+  '工具', 'tools', '控制台', 'console',
+  '激活', 'activation', '注册', 'register'
+];
+
+const APP_FILTER_PUBLISHERS = [
+  'microsoft corporation', 'intel corporation', 'nvidia corporation', 'advanced micro devices',
+  'realtek', 'adobe systems', 'google llc', 'mozilla', 'apple inc',
+  'oracle corporation', 'jetbrains', 'autodesk'
+];
+
+const APP_FILTER_EXACT_NAMES = [
+  'remote desktop connection', 'mstsc',
+  '新机手册', '快速入门', 'getting started',
+  'windows powershell', 'windows 终端', 'windows terminal',
+  '命令提示符', 'cmd', '磁盘清理', 'cleanmgr',
+  '事件查看器', 'event viewer', '资源监视器', 'resource monitor',
+  '任务管理器', 'task manager', '注册表编辑器', 'regedit',
+  '性能监视器', 'performance monitor', '计算机管理', 'computer management',
+  '系统信息', 'system information', '系统配置', 'system configuration',
+  '本地安全策略', '本地组策略', 'secpol', 'gpedit',
+  'onenote for windows', 'send to onenote',
+  'windows 传真和扫描', 'windows fax',
+  '步骤记录器', 'problem steps recorder',
+  '字符映射表', 'charmap', '画图', 'mspaint',
+  '截图工具', 'snippingtool', '便笺', 'sticky notes',
+  '写字板', 'wordpad', '记事本', 'notepad',
+  'windows 媒体播放器', 'windows media player',
+  'internet explorer', 'ie', 'edge 更新', 'edge update'
+];
+
+const preFilterApps = (apps) => {
+  return apps.filter(app => {
+    const name = (app.name || '').toLowerCase().trim();
+    const publisher = (app.publisher || '').toLowerCase().trim();
+
+    if (APP_FILTER_EXACT_NAMES.some(exact => name === exact || name.includes(exact))) {
+      return false;
+    }
+
+    for (const keyword of APP_FILTER_KEYWORDS) {
+      if (name.includes(keyword.toLowerCase())) {
+        const isException =
+          (keyword === 'helper' && name.includes('file helper')) ||
+          (keyword === 'cloud' && (name.includes('cloudflare') || name.includes('owncloud')));
+        if (!isException) return false;
+      }
+    }
+
+    if (publisher && APP_FILTER_PUBLISHERS.some(kw => publisher.includes(kw))) {
+      const isSystemTool =
+        name.includes('update') || name.includes('patch') ||
+        name.includes('runtime') || name.includes('driver') ||
+        name.includes('service') || name.includes('helper') ||
+        name.includes('redistributable') || name.includes('framework') ||
+        name.includes('sdk') || name.includes('installer') ||
+        name.includes('sync') || name.includes('cloud') ||
+        name.includes('telemetry') || name.includes('config');
+      if (isSystemTool) return false;
+    }
+
+    return true;
+  });
+};
+
 const filterWithAI = async () => {
   filtering.value = true;
   try {
-    const preFilteredApps = scannedApps.value.filter(app => {
-      const name = app.name.toLowerCase();
-      const publisher = (app.publisher || '').toLowerCase();
-      
-      const excludeKeywords = [
-        'update', 'updater', 'patch', 'hotfix', 'fix', 'repair',
-        'crash', 'crashreporter', 'crash handler', 'error report',
-        'helper', 'assistant', 'service', 'daemon', 'agent',
-        'runtime', 'framework', 'sdk', 'development kit',
-        ' redistributable', 'merge module', 'compatibility',
-        'setup', 'installer', 'bootstrap', 'deploy',
-        'driver', 'codec', 'plugin', 'extension pack',
-        'debug', 'test', 'demo', 'sample', 'example',
-        'readme', 'license', 'eula', 'documentation',
-        'toolkit', 'workbench', 'utility', 'wizard'
-      ];
-      
-      const excludePublisherKeywords = [
-        'microsoft corporation', 'intel', 'nvidia', 'amd', 'realtek',
-        'adobe systems', 'google llc', 'mozilla', 'apple inc'
-      ];
-      
-      for (const keyword of excludeKeywords) {
-        if (name.includes(keyword)) {
-          return false;
-        }
-      }
-      
-      if (publisher && excludePublisherKeywords.some(kw => publisher.includes(kw))) {
-        if (name.includes('update') || name.includes('patch') || 
-            name.includes('runtime') || name.includes('driver') ||
-            name.includes('service') || name.includes('helper')) {
-          return false;
-        }
-      }
-      
-      return true;
-    });
-    
+    const preFilteredApps = preFilterApps(scannedApps.value);
+
     if (preFilteredApps.length === 0) {
       message.warning("预筛选后没有找到合适的应用");
       filtering.value = false;
       return;
     }
-    
+
     const response = await websiteApi.filterApps(preFilteredApps);
     scannedApps.value = response.data.data || [];
     selectedApps.value = scannedApps.value.map((app) => app.path || app.name);
@@ -1327,13 +1395,18 @@ const scanApps = async () => {
         const desktopCount = scannedApps.value.filter(a => a.source === "desktop").length;
         const startMenuCount = scannedApps.value.filter(a => a.source === "startmenu").length;
         const registryCount = scannedApps.value.filter(a => a.source === "registry").length;
+        const storeCount = scannedApps.value.filter(a => a.source === "microsoftstore").length;
         const sourceInfo = [];
         if (desktopCount) sourceInfo.push(`桌面 ${desktopCount}`);
         if (startMenuCount) sourceInfo.push(`开始菜单 ${startMenuCount}`);
         if (registryCount) sourceInfo.push(`注册表 ${registryCount}`);
+        if (storeCount) sourceInfo.push(`Microsoft Store ${storeCount}`);
         message.info(`扫描完成：${sourceInfo.join("、")}`);
+        appIconMap.value = new Map();
         showPreviewModal.value = true;
-        loadAppIcons(scannedApps.value);
+        nextTick(() => {
+          loadAppIcons(scannedApps.value);
+        });
       }
     } else {
       message.info("未找到新的应用");
@@ -1393,22 +1466,25 @@ const getIconGradient = (name) => {
 const importSelectedApps = async () => {
   importing.value = true;
   let imported = 0;
+  let skipped = 0;
   let failedApps = [];
   try {
     for (const key of selectedApps.value) {
       const app = scannedApps.value.find((a) => (a.path || a.name) === key);
       if (app) {
         try {
+          const iconData = getAppIcon(app);
           const response = await websiteApi.create({
             name: app.name,
             app_path: app.path || "",
-            favicon: app.icon || "",
+            favicon: iconData || "",
             type: "app"
           });
-          if (response.data.data) {
-            addWebsite(response.data.data);
+          if (response.data.exists) {
+            skipped++;
+          } else {
+            imported++;
           }
-          imported++;
         } catch (e) {
           console.error("导入应用失败:", e);
           const errorMsg = e.response?.data?.error || e.message || "导入失败";
@@ -1418,7 +1494,11 @@ const importSelectedApps = async () => {
     }
     showPreviewModal.value = false;
     if (imported > 0) {
+      await reloadWebsites();
       message.success(`成功导入 ${imported} 个应用`);
+    }
+    if (skipped > 0) {
+      message.info(`${skipped} 个应用已存在，已跳过`);
     }
     if (failedApps.length > 0) {
       message.warning(`部分应用导入失败: ${failedApps.slice(0, 3).join(', ')}${failedApps.length > 3 ? '...' : ''}`);
@@ -1537,16 +1617,21 @@ const truncateUrl = (url) => {
   if (!url) return "";
   try {
     const urlObj = new URL(url);
-    return urlObj.hostname;
+    const display = urlObj.hostname;
+    return display.length > 25 ? display.substring(0, 25) + "..." : display;
   } catch {
-    return url.length > 30 ? url.substring(0, 30) + "..." : url;
+    return url.length > 25 ? url.substring(0, 25) + "..." : url;
   }
 };
 
 const truncatePath = (path) => {
   if (!path) return "";
+  if (path.startsWith("shell:AppsFolder\\")) {
+    return "Microsoft Store";
+  }
   const fileName = path.split(/[/\\]/).pop();
-  return fileName || path;
+  const truncated = fileName || path;
+  return truncated.length > 20 ? truncated.substring(0, 20) + "..." : truncated;
 };
 
 const getBookmarkDomain = (url) => {
@@ -1588,55 +1673,6 @@ const handleBookmarkIconError = (bookmark) => {
     }
   }
   bookmark._iconError = true;
-};
-
-const handleDragStart = (e, index) => {
-  dragIndex.value = index;
-  e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/plain', index.toString());
-};
-
-const handleDragOver = (e, index) => {
-  if (dragIndex.value !== index) {
-    dragOverIndex.value = index;
-  }
-};
-
-const handleDragLeave = () => {
-  dragOverIndex.value = -1;
-};
-
-const handleDrop = async (e, targetIndex) => {
-  const sourceIndex = dragIndex.value;
-  if (sourceIndex === targetIndex) {
-    return;
-  }
-  
-  const items = [...filteredItems.value];
-  const [movedItem] = items.splice(sourceIndex, 1);
-  items.splice(targetIndex, 0, movedItem);
-  
-  const orders = items.map((item, idx) => ({
-    id: item.id,
-    sort_order: idx
-  }));
-  
-  try {
-    await websiteApi.reorder(orders);
-    await loadItems();
-    message.success('排序已更新');
-  } catch (error) {
-    console.error('更新排序失败:', error);
-    const errorMsg = error.response?.data?.error || error.message || '更新排序失败';
-    message.error(errorMsg);
-  }
-  
-  dragOverIndex.value = -1;
-};
-
-const handleDragEnd = () => {
-  dragIndex.value = -1;
-  dragOverIndex.value = -1;
 };
 
 onMounted(() => {
@@ -1728,16 +1764,6 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-}
-
-.dragging .website-card {
-  opacity: 0.5;
-  transform: scale(0.98);
-}
-
-.drag-over .website-card {
-  border: 2px dashed var(--primary-color, #667eea);
-  transform: scale(1.02);
 }
 
 .card-description {

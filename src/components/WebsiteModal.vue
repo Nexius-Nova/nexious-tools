@@ -246,16 +246,17 @@ const appSourceFilter = ref(null)
 const appSourceOptions = [
   { label: '桌面快捷方式', value: 'desktop' },
   { label: '开始菜单', value: 'startmenu' },
-  { label: '注册表', value: 'registry' }
+  { label: '注册表', value: 'registry' },
+  { label: 'Microsoft Store', value: 'microsoftstore' }
 ]
 
 const getSourceLabel = (source) => {
-  const map = { desktop: '桌面', startmenu: '开始菜单', registry: '注册表' }
+  const map = { desktop: '桌面', startmenu: '开始菜单', registry: '注册表', microsoftstore: 'MS Store' }
   return map[source] || source || '未知'
 }
 
 const getSourceTagType = (source) => {
-  const map = { desktop: 'info', startmenu: 'success', registry: 'warning' }
+  const map = { desktop: 'info', startmenu: 'success', registry: 'warning', microsoftstore: 'error' }
   return map[source] || 'default'
 }
 
@@ -340,14 +341,20 @@ const loadInstalledAppIcons = async (apps, batchSize = 30) => {
     return
   }
 
-  const allPaths = apps.map(app => app.path).filter(Boolean)
-  const totalBatches = Math.ceil(allPaths.length / batchSize)
+  const appsToLoad = apps.filter(app => app.path)
+  const totalBatches = Math.ceil(appsToLoad.length / batchSize)
   
   for (let i = 0; i < totalBatches; i++) {
-    const batchPaths = allPaths.slice(i * batchSize, (i + 1) * batchSize)
+    const batchApps = appsToLoad.slice(i * batchSize, (i + 1) * batchSize)
+    const plainApps = batchApps.map(app => ({
+      path: app.path,
+      source: app.source,
+      installLocation: app.installLocation,
+      logo: app.logo
+    }))
     
     try {
-      const iconMap = await window.electronAPI.getAppIcons(batchPaths)
+      const iconMap = await window.electronAPI.getAppIcons(plainApps)
       installedApps.value = installedApps.value.map(app => ({
         ...app,
         icon: app.icon || iconMap?.[app.path] || ''

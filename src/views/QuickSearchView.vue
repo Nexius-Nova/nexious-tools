@@ -230,9 +230,6 @@ const quickResults = computed(() => {
   if (!query) {
     const sortedWebsites = [...websites.value]
       .sort((a, b) => {
-        if (a.sort_order !== b.sort_order) {
-          return (a.sort_order || 0) - (b.sort_order || 0);
-        }
         return new Date(b.created_at || 0) - new Date(a.created_at || 0);
       });
 

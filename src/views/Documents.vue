@@ -587,7 +587,7 @@ const loadDocuments = async () => {
     const res = await documentApi.getAll()
     documents.value = res.data.data || []
     
-    if (route.query.id) {
+    if (route.query.id && !currentDoc.value?.id) {
       const doc = documents.value.find(d => String(d.id) === String(route.query.id))
       if (doc) {
         selectDoc(doc)
@@ -783,7 +783,8 @@ const confirmImportPreview = async () => {
       word_count: wordCount
     }
 
-    await documentApi.create(docData)
+    const res = await documentApi.create(docData)
+    const newId = res.data?.data?.id
     
     const currentIndex = importPreviewData.value.index || 0
     const remainingFiles = pendingImportFiles.value.slice(currentIndex + 1)
@@ -803,7 +804,16 @@ const confirmImportPreview = async () => {
       message.success('文档导入成功')
     }
     
-    loadDocuments()
+    await loadDocuments()
+    
+    if (newId) {
+      const newDoc = documents.value.find(d => String(d.id) === String(newId))
+      if (newDoc) {
+        currentDoc.value = { ...newDoc }
+        originalDoc.value = { ...newDoc }
+        isEditMode.value = false
+      }
+    }
   } catch (error) {
     console.error('导入文档失败:', error)
     message.error('导入文档失败')
@@ -879,7 +889,7 @@ const saveDoc = async () => {
     await loadDocuments()
     
     if (currentDoc.value?.id) {
-      const savedDoc = documents.value.find(d => d.id === currentDoc.value.id)
+      const savedDoc = documents.value.find(d => String(d.id) === String(currentDoc.value.id))
       if (savedDoc) {
         currentDoc.value = { ...savedDoc }
         originalDoc.value = { ...savedDoc }

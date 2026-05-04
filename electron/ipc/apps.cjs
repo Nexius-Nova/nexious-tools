@@ -307,6 +307,190 @@ function findExeInDir(dirPath, maxDepth = 1) {
   return results;
 }
 
+async function getMicrosoftStoreApps() {
+  const apps = [];
+  const seenAumids = new Set();
+
+  const psScript = `
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $ErrorActionPreference = 'SilentlyContinue'
+    $installedapps = Get-AppxPackage
+    $results = @()
+    foreach ($app in $installedapps) {
+      $manifest = Get-AppxPackageManifest $app
+      if ($manifest -and $manifest.package -and $manifest.package.applications) {
+        $applications = $manifest.package.applications.application
+        if ($applications) {
+          foreach ($appEntry in $applications) {
+            $appId = $appEntry.Id
+            if ($appId) {
+              $aumid = $app.PackageFamilyName + "!" + $appId
+              $displayName = $appEntry.VisualElements.DisplayName
+              if ($displayName -and $displayName.StartsWith("ms-resource:")) {
+                $displayName = $app.Name
+              }
+              if (-not $displayName) {
+                $displayName = $app.Name
+              }
+              $logoPath = ""
+              if ($appEntry.VisualElements.Square44x44Logo) {
+                $logoPath = $appEntry.VisualElements.Square44x44Logo
+              } elseif ($appEntry.VisualElements.Logo) {
+                $logoPath = $appEntry.VisualElements.Logo
+              }
+              $results += [PSCustomObject]@{
+                Name = $displayName
+                PackageFamilyName = $app.PackageFamilyName
+                ApplicationId = $appId
+                AUMID = $aumid
+                InstallLocation = $app.InstallLocation
+                Logo = $logoPath
+                Publisher = $app.PublisherDisplayName
+                Version = "$($app.Version.Major).$($app.Version.Minor).$($app.Version.Build).$($app.Version.Revision)"
+              }
+            }
+          }
+        }
+      }
+    }
+    $results | ConvertTo-Json -Depth 2 -Compress
+  `;
+
+  const { spawn } = require("child_process");
+
+  return new Promise((resolve) => {
+    const proc = spawn(
+      "powershell",
+      ["-NoProfile", "-NonInteractive", "-Command", psScript],
+      {
+        stdio: "pipe",
+        windowsHide: true,
+        env: { ...process.env, POWERSHELL_TELEMETRY_OPTOUT: "1" }
+      }
+    );
+
+    let stdout = "";
+    let timeout = setTimeout(() => {
+      proc.kill();
+      resolve(apps);
+    }, 30000);
+
+    proc.stdout.on("data", (data) => {
+      stdout += data.toString("utf8");
+    });
+
+    proc.on("close", () => {
+      clearTimeout(timeout);
+      try {
+        let items = [];
+        if (stdout.trim()) {
+          const parsed = JSON.parse(stdout);
+          items = Array.isArray(parsed) ? parsed : [parsed];
+        }
+
+        const systemAppPatterns = [
+          /Microsoft\.Windows\.(ShellExperienceHost|CloudExperienceHost|OOBENetwork)/i,
+          /Microsoft\.AAD\.BrokerPlugin/i,
+          /Microsoft\.BioEnrollment/i,
+          /Microsoft\.Windows\.StartMenuExperienceHost/i,
+          /windows\.immersivecontrolpanel/i,
+          /Microsoft\.XboxGameOverlay/i,
+          /Microsoft\.XboxSpeechToTextOverlay/i,
+          /Microsoft\.Xbox\.TCUI/i,
+          /Microsoft\.XboxIdentityProvider/i,
+          /Microsoft\.WebMediaExtensions/i,
+          /Microsoft\.WebpImageExtension/i,
+          /Microsoft\.VCLibs/i,
+          /Microsoft\.UI/i,
+          /Microsoft\.NET/i,
+          /Microsoft\.GetHelp/i,
+          /Microsoft\.Windows\.ContentDeliveryManager/i,
+          /Microsoft\.Windows\.Search/i,
+          /Microsoft\.Windows\.Security/i,
+          /Microsoft\.Windows\.Shell/i,
+          /Microsoft\.Windows\.CBS/i,
+          /Microsoft\.WindowsAlarms/i,
+          /Microsoft\.WindowsCalculator/i,
+          /Microsoft\.WindowsMaps/i,
+          /Microsoft\.WindowsSoundRecorder/i,
+          /Microsoft\.ZuneVideo/i,
+          /Microsoft\.ZuneMusic/i,
+          /Microsoft\.Windows.Photos/i,
+          /Microsoft\.WindowsStore/i,
+          /Microsoft\.WindowsNotepad/i,
+          /Microsoft\.Paint/i,
+          /Microsoft\.StickyNotes/i,
+          /Microsoft\.MixedReality\.Portal/i,
+          /Microsoft\.WindowsFeedbackHub/i,
+          /Microsoft\.Getstarted/i,
+          /Microsoft\.People/i,
+          /Microsoft\.SkypeApp/i,
+          /Microsoft\.Office\.OneNote/i,
+          /Microsoft\.BingWeather/i,
+          /Microsoft\.Microsoft3DViewer/i,
+          /Microsoft\.WindowsCommunicationsApps/i,
+          /Microsoft\.WindowsCamera/i,
+          /Microsoft\.XboxApp/i,
+          /Microsoft\.XboxGamingOverlay/i,
+          /Microsoft\.YourPhone/i,
+          /Microsoft\.WindowsTerminal/i,
+          /Microsoft\.ScreenSketch/i,
+          /Microsoft\.HEIFImageExtension/i,
+          /Microsoft\.RawImageExtension/i,
+          /Microsoft\.VP9VideoExtensions/i,
+          /Microsoft\.WebMediaExtensions/i,
+          /Microsoft\.AV1VideoExtension/i
+        ];
+
+        for (const item of items) {
+          try {
+            const aumid = item.AUMID;
+            if (!aumid || seenAumids.has(aumid)) continue;
+
+            let isSystemApp = false;
+            for (const pattern of systemAppPatterns) {
+              if (pattern.test(aumid)) {
+                isSystemApp = true;
+                break;
+              }
+            }
+            if (isSystemApp) continue;
+
+            let displayName = item.Name;
+            if (!displayName || displayName.startsWith("ms-resource:")) {
+              displayName = item.PackageFamilyName.split("_")[0];
+            }
+
+            seenAumids.add(aumid);
+
+            apps.push({
+              name: displayName,
+              path: `shell:AppsFolder\\${aumid}`,
+              icon: "",
+              version: item.Version || "",
+              publisher: item.Publisher || "",
+              source: "microsoftstore",
+              aumid: aumid,
+              installLocation: item.InstallLocation || "",
+              logo: item.Logo || ""
+            });
+          } catch (e) {
+            // ignore
+          }
+        }
+      } catch (e) {
+        console.error("解析 Microsoft Store Apps 数据失败:", e.message);
+      }
+      resolve(apps);
+    });
+
+    proc.on("error", () => {
+      clearTimeout(timeout);
+      resolve(apps);
+    });
+  });
+}
+
 function _findExeRecursive(dirPath, results, depth, maxDepth) {
   if (depth > maxDepth || results.length >= 1) return;
   let entries;
@@ -353,10 +537,11 @@ function registerAppsIpc(getIconCache) {
     const seenNames = new Set();
 
     if (process.platform === "win32") {
-      const [desktopApps, startMenuApps, registryApps] = await Promise.all([
+      const [desktopApps, startMenuApps, registryApps, storeApps] = await Promise.all([
         getDesktopShortcuts(),
         getStartMenuShortcuts(),
-        getRegistryApps()
+        getRegistryApps(),
+        getMicrosoftStoreApps()
       ]);
 
       for (const app of desktopApps) {
@@ -394,6 +579,13 @@ function registerAppsIpc(getIconCache) {
           apps.push({ ...app, source: "registry" });
         }
       }
+
+      for (const app of storeApps) {
+        if (!seenNames.has(app.name.toLowerCase())) {
+          seenNames.add(app.name.toLowerCase());
+          apps.push(app);
+        }
+      }
     }
 
     const filteredApps = apps.filter((app) => !isUninstaller(app));
@@ -404,7 +596,19 @@ function registerAppsIpc(getIconCache) {
   });
 
   ipcMain.on("open-app", (event, appPath) => {
-    if (appPath && fs.existsSync(appPath)) {
+    if (!appPath) return;
+
+    if (appPath.startsWith("shell:AppsFolder\\")) {
+      const { spawn } = require("child_process");
+      spawn("explorer.exe", [appPath], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true
+      }).unref();
+      return;
+    }
+
+    if (fs.existsSync(appPath)) {
       shell.openPath(appPath);
     } else {
       shell.openExternal(appPath);
@@ -428,5 +632,6 @@ module.exports = {
   isUninstaller,
   getDesktopShortcuts,
   getStartMenuShortcuts,
-  getRegistryApps
+  getRegistryApps,
+  getMicrosoftStoreApps
 };

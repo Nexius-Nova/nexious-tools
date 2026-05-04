@@ -66,9 +66,28 @@ export function queryOne(sql, params = []) {
 
 export function run(sql, params = []) {
   if (!db) throw new Error("数据库未初始化");
-  db.run(sql, params);
-  saveDatabase();
-  return { lastInsertRowid: getLastInsertRowId() };
+  try {
+    let lastId = null;
+    
+    if (params && params.length > 0) {
+      const stmt = db.prepare(sql);
+      stmt.bind(params);
+      stmt.step();
+      stmt.free();
+    } else {
+      db.run(sql);
+    }
+    
+    const result = queryOne("SELECT last_insert_rowid() as id");
+    lastId = result ? result.id : null;
+    
+    saveDatabase();
+    
+    return { lastInsertRowid: lastId, changes: 1 };
+  } catch (e) {
+    console.error("SQL执行错误:", e.message, sql);
+    throw e;
+  }
 }
 
 export function getLastInsertRowId() {
