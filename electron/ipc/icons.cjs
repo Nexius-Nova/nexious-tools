@@ -38,7 +38,6 @@ function loadIconCache() {
       entries.forEach(([key, value]) => {
         iconCache.set(key, value);
       });
-      console.log(`已加载 ${iconCache.size} 个图标缓存`);
     }
   } catch (e) {
     console.error("加载图标缓存失败:", e.message);

@@ -55,7 +55,7 @@
 - 收藏功能
 - 拖拽移动文档
 
-### AI 助手
+### AI 对话
 
 ![AI对话界面截图](./demo/image-6.png)
 ![AI对话历史截图](./demo/image-7.png)

@@ -1,12 +1,37 @@
 import express from 'express'
 import { query, queryOne, execute } from '../db.js'
 import axios from 'axios'
+import { getModelCategories, getCategoryLabel } from '../ai-utils.js'
 
 const router = express.Router()
 
 router.get('/', async (req, res) => {
   try {
     const rows = await query('SELECT * FROM ai_models ORDER BY is_default DESC, created_at DESC')
+    res.json({ data: rows })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.get('/categories', async (req, res) => {
+  try {
+    const categories = getModelCategories().map(c => ({
+      value: c,
+      label: getCategoryLabel(c)
+    }))
+    res.json({ data: categories })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.get('/enabled', async (req, res) => {
+  try {
+    const category = req.query.category
+    const rows = category
+      ? await query('SELECT * FROM ai_models WHERE is_enabled = 1 AND category = ? ORDER BY is_default DESC, created_at DESC', [category])
+      : await query('SELECT * FROM ai_models WHERE is_enabled = 1 ORDER BY is_default DESC, created_at DESC')
     res.json({ data: rows })
   } catch (error) {
     res.status(500).json({ error: error.message })
@@ -26,12 +51,12 @@ router.get('/:id', async (req, res) => {
 })
 
 router.post('/', async (req, res) => {
-  const { name, provider, api_key, base_url, model } = req.body
-  
+  const { name, provider, api_key, base_url, model, category } = req.body
+
   if (!name || !provider || !api_key || !model) {
     return res.status(400).json({ error: '名称、提供商、API Key 和模型名称为必填项' })
   }
-  
+
   try {
     const existing = await queryOne(
       'SELECT id FROM ai_models WHERE name = ?',
@@ -40,16 +65,25 @@ router.post('/', async (req, res) => {
     if (existing) {
       return res.status(400).json({ error: `已存在名称为"${name}"的AI模型配置` })
     }
-    
-    await execute('UPDATE ai_models SET is_enabled = 0, is_default = 0')
-    
-    const result = await execute(
-      'INSERT INTO ai_models (name, provider, api_key, base_url, model, is_enabled, is_default) VALUES (?, ?, ?, ?, ?, 1, 1)',
-      [name, provider, api_key, base_url || null, model]
-    )
-    
-    const newModel = await queryOne('SELECT * FROM ai_models WHERE id = ?', [result.lastInsertRowid])
-    res.json({ data: newModel })
+
+    const modelCategory = category || 'text'
+
+    const hasDefault = await queryOne('SELECT id FROM ai_models WHERE is_default = 1')
+    if (!hasDefault) {
+      const result = await execute(
+        'INSERT INTO ai_models (name, provider, api_key, base_url, model, category, is_enabled, is_default) VALUES (?, ?, ?, ?, ?, ?, 1, 1)',
+        [name, provider, api_key, base_url || null, model, modelCategory]
+      )
+      const newModel = await queryOne('SELECT * FROM ai_models WHERE id = ?', [result.lastInsertRowid])
+      res.json({ data: newModel })
+    } else {
+      const result = await execute(
+        'INSERT INTO ai_models (name, provider, api_key, base_url, model, category, is_enabled, is_default) VALUES (?, ?, ?, ?, ?, ?, 1, 0)',
+        [name, provider, api_key, base_url || null, model, modelCategory]
+      )
+      const newModel = await queryOne('SELECT * FROM ai_models WHERE id = ?', [result.lastInsertRowid])
+      res.json({ data: newModel })
+    }
   } catch (error) {
     res.status(500).json({ error: error.message })
   }
@@ -57,14 +91,14 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   const { id } = req.params
-  const { name, provider, api_key, base_url, model } = req.body
-  
+  const { name, provider, api_key, base_url, model, category } = req.body
+
   try {
     const existing = await queryOne('SELECT * FROM ai_models WHERE id = ?', [id])
     if (!existing) {
       return res.status(404).json({ error: '模型配置不存在' })
     }
-    
+
     const checkName = name ?? existing.name
     const duplicateName = await queryOne(
       'SELECT id FROM ai_models WHERE name = ? AND id != ?',
@@ -73,19 +107,20 @@ router.put('/:id', async (req, res) => {
     if (duplicateName) {
       return res.status(400).json({ error: `已存在名称为"${checkName}"的AI模型配置` })
     }
-    
+
     await execute(
-      'UPDATE ai_models SET name = ?, provider = ?, api_key = ?, base_url = ?, model = ? WHERE id = ?',
+      'UPDATE ai_models SET name = ?, provider = ?, api_key = ?, base_url = ?, model = ?, category = ? WHERE id = ?',
       [
         name ?? existing.name,
         provider ?? existing.provider,
         api_key ?? existing.api_key,
         base_url !== undefined ? base_url : existing.base_url,
         model ?? existing.model,
+        category !== undefined ? category : (existing.category || 'text'),
         id
       ]
     )
-    
+
     const updated = await queryOne('SELECT * FROM ai_models WHERE id = ?', [id])
     res.json({ data: updated })
   } catch (error) {
@@ -95,13 +130,13 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   const { id } = req.params
-  
+
   try {
     const existing = await queryOne('SELECT * FROM ai_models WHERE id = ?', [id])
     if (!existing) {
       return res.status(404).json({ error: '模型配置不存在' })
     }
-    
+
     await execute('DELETE FROM ai_models WHERE id = ?', [id])
     res.json({ success: true })
   } catch (error) {
@@ -111,16 +146,20 @@ router.delete('/:id', async (req, res) => {
 
 router.post('/:id/set-default', async (req, res) => {
   const { id } = req.params
-  
+
   try {
     const existing = await queryOne('SELECT * FROM ai_models WHERE id = ?', [id])
     if (!existing) {
       return res.status(404).json({ error: '模型配置不存在' })
     }
-    
-    await execute('UPDATE ai_models SET is_default = 0, is_enabled = 0')
-    await execute('UPDATE ai_models SET is_default = 1, is_enabled = 1 WHERE id = ?', [id])
-    
+
+    if (!existing.is_enabled) {
+      return res.status(400).json({ error: '请先启用该模型' })
+    }
+
+    await execute('UPDATE ai_models SET is_default = 0')
+    await execute('UPDATE ai_models SET is_default = 1 WHERE id = ?', [id])
+
     res.json({ success: true })
   } catch (error) {
     res.status(500).json({ error: error.message })
@@ -129,22 +168,21 @@ router.post('/:id/set-default', async (req, res) => {
 
 router.post('/:id/toggle', async (req, res) => {
   const { id } = req.params
-  
+
   try {
     const existing = await queryOne('SELECT * FROM ai_models WHERE id = ?', [id])
     if (!existing) {
       return res.status(404).json({ error: '模型配置不存在' })
     }
-    
+
     const newStatus = existing.is_enabled ? 0 : 1
-    
-    if (newStatus === 1) {
-      await execute('UPDATE ai_models SET is_enabled = 0, is_default = 0')
-      await execute('UPDATE ai_models SET is_enabled = 1, is_default = 1 WHERE id = ?', [id])
-    } else {
+
+    if (newStatus === 0) {
       await execute('UPDATE ai_models SET is_enabled = 0, is_default = 0 WHERE id = ?', [id])
+    } else {
+      await execute('UPDATE ai_models SET is_enabled = 1 WHERE id = ?', [id])
     }
-    
+
     res.json({ success: true, is_enabled: newStatus })
   } catch (error) {
     res.status(500).json({ error: error.message })
@@ -153,7 +191,7 @@ router.post('/:id/toggle', async (req, res) => {
 
 router.post('/test', async (req, res) => {
   const { provider, apiKey, baseUrl, model } = req.body
-  
+
   try {
     const providerUrls = {
       openai: 'https://api.openai.com/v1',
@@ -167,13 +205,13 @@ router.post('/test', async (req, res) => {
       siliconflow: 'https://api.siliconflow.cn/v1',
       openrouter: 'https://openrouter.ai/api/v1'
     }
-    
+
     let testUrl = baseUrl || providerUrls[provider]
-    
+
     if (!testUrl) {
       return res.status(400).json({ success: false, message: '请提供 API Base URL' })
     }
-    
+
     if (provider === 'anthropic') {
       try {
         await axios.post(`${testUrl}/messages`, {
@@ -195,12 +233,12 @@ router.post('/test', async (req, res) => {
       }
       return
     }
-    
+
     if (provider === 'baidu') {
       res.json({ success: true, message: '百度文心需要使用 Access Token，请直接保存配置后使用' })
       return
     }
-    
+
     try {
       await axios.get(`${testUrl}/models`, {
         headers: {
@@ -208,7 +246,7 @@ router.post('/test', async (req, res) => {
         },
         timeout: 10000
       })
-      
+
       res.json({ success: true, message: '连接成功' })
     } catch (error) {
       const message = error.response?.data?.error?.message || error.message || '连接失败'

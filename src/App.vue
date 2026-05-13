@@ -19,7 +19,7 @@
               <n-layout>
                 <n-layout-content class="content-area">
                   <router-view v-slot="{ Component }">
-                    <transition name="page-fade" mode="out-in">
+                    <keep-alive>
                       <suspense>
                         <template #default>
                           <component :is="Component" />
@@ -30,7 +30,7 @@
                           </div>
                         </template>
                       </suspense>
-                    </transition>
+                    </keep-alive>
                   </router-view>
                 </n-layout-content>
               </n-layout>

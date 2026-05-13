@@ -118,53 +118,33 @@
                   </div>
                 </div>
                 <div
-                  v-if="msg.references && msg.references.length > 0"
-                  class="message-references"
-                >
-                  <n-tag
-                    v-for="ref in msg.references"
-                    :key="ref.id"
-                    size="small"
-                    round
-                    :type="getRefTagType(ref.type)"
-                  >
-                    {{ ref.type }}: {{ ref.name }}
-                  </n-tag>
-                </div>
-                <div
                   v-if="msg.images && msg.images.length > 0"
                   class="message-images"
                 >
-                  <img
+                  <div
                     v-for="(img, imgIndex) in msg.images"
                     :key="imgIndex"
-                    :src="getImagePreviewSrc(img)"
-                    class="message-image"
-                    @click="previewImage(getImagePreviewSrc(img))"
-                  />
+                    class="message-image-wrapper"
+                  >
+                    <img
+                      :src="getImagePreviewSrc(img)"
+                      class="message-image"
+                      @click="previewImage(getImagePreviewSrc(img))"
+                    />
+                    <n-button
+                      circle
+                      size="tiny"
+                      class="image-download-btn"
+                      @click="downloadMedia(getImagePreviewSrc(img), `image-${Date.now()}.png`)"
+                    >
+                      <template #icon>
+                        <n-icon><DownloadOutline /></n-icon>
+                      </template>
+                    </n-button>
+                  </div>
                 </div>
                 <div class="message-content-wrapper">
-                  <MessageContent :content="msg.content" />
-                </div>
-                <div
-                  v-if="
-                    msg.role === 'assistant' &&
-                    msg.aiReferences &&
-                    msg.aiReferences.length > 0
-                  "
-                  class="message-references"
-                >
-                  <n-text depth="3" style="font-size: 11px">引用数据：</n-text>
-                  <n-space size="small">
-                    <n-tag
-                      v-for="ref in msg.aiReferences"
-                      :key="ref.id"
-                      size="small"
-                      round
-                    >
-                      {{ ref.type }}: {{ ref.name }}
-                    </n-tag>
-                  </n-space>
+                  <MessageContent :content="msg.content" @preview-image="handlePreviewImageFromContent" />
                 </div>
                 <div class="message-actions">
                   <n-button text size="small" @click="quoteMessage(msg)">
@@ -187,156 +167,35 @@
               <div class="message-body">
                 <div class="message-content-wrapper">
                   <MessageContent v-if="streamingContent" :content="streamingContent" />
-                  <n-text v-else depth="3">
-                    <n-spin size="small" />
-                    <span style="margin-left: 8px">思考中...</span>
-                  </n-text>
+                  <div v-else class="thinking-indicator">
+                    <div class="thinking-dots">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                    <span class="thinking-text">AI 正在思考</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div v-if="pendingData.type && !loading" class="inline-review">
-              <div class="inline-review-header">
-                <n-icon size="18"><RocketOutline /></n-icon>
-                <span class="inline-review-title"
-                  >{{ currentAgent?.label || "智能体" }} 已生成数据</span
-                >
-                <span class="inline-review-subtitle">请审核以下内容</span>
-              </div>
-
-              <div
-                v-if="pendingData.type === 'snippet'"
-                class="inline-review-content"
-              >
-                <div class="review-field">
-                  <span class="review-label">标题：</span>
-                  <n-input v-model:value="pendingData.data.title" size="small" />
-                </div>
-                <div class="review-field">
-                  <span class="review-label">语言：</span>
-                  <n-select
-                    v-model:value="pendingData.data.language"
-                    :options="languageOptions"
-                    size="small"
-                    style="width: 150px"
-                  />
-                </div>
-                <div class="review-field">
-                  <span class="review-label">分类：</span>
-                  <n-select
-                    v-model:value="pendingData.data.category"
-                    :options="categoryOptions"
-                    size="small"
-                    style="width: 150px"
-                    placeholder="选择分类"
-                  />
-                </div>
-                <div class="review-field">
-                  <span class="review-label">描述：</span>
-                  <n-input
-                    v-model:value="pendingData.data.description"
-                    size="small"
-                  />
-                </div>
-                <div class="review-field">
-                  <span class="review-label">代码：</span>
-                  <n-input
-                    v-model:value="pendingData.data.code"
-                    type="textarea"
-                    :rows="6"
-                    size="small"
-                  />
-                </div>
-                <div class="review-actions">
-                  <n-button
-                    size="small"
-                    @click="pendingData = { type: '', data: {} }"
-                    >取消</n-button
-                  >
-                  <n-button
-                    type="primary"
-                    size="small"
-                    @click="confirmAddData"
-                    :loading="addingData"
-                    >确认添加</n-button
-                  >
-                </div>
-              </div>
-
-              <div
-                v-else-if="pendingData.type === 'document'"
-                class="inline-review-content"
-              >
-                <div class="review-field">
-                  <span class="review-label">标题：</span>
-                  <n-input v-model:value="pendingData.data.title" size="small" />
-                </div>
-                <div class="review-field">
-                  <span class="review-label">内容：</span>
-                  <n-input
-                    v-model:value="pendingData.data.content"
-                    type="textarea"
-                    :rows="8"
-                    size="small"
-                  />
-                </div>
-                <div class="review-actions">
-                  <n-button
-                    size="small"
-                    @click="pendingData = { type: '', data: {} }"
-                    >取消</n-button
-                  >
-                  <n-button
-                    type="primary"
-                    size="small"
-                    @click="confirmAddData"
-                    :loading="addingData"
-                    >确认添加</n-button
-                  >
-                </div>
-              </div>
-
-              <div
-                v-else-if="pendingData.type === 'website'"
-                class="inline-review-content"
-              >
-                <div class="review-field">
-                  <span class="review-label">名称：</span>
-                  <n-input v-model:value="pendingData.data.name" size="small" />
-                </div>
-                <div class="review-field">
-                  <span class="review-label">URL：</span>
-                  <n-input v-model:value="pendingData.data.url" size="small" />
-                </div>
-                <div class="review-field">
-                  <span class="review-label">别名：</span>
-                  <n-input v-model:value="pendingData.data.alias" size="small" />
-                </div>
-                <div class="review-field">
-                  <span class="review-label">描述：</span>
-                  <n-input
-                    v-model:value="pendingData.data.description"
-                    type="textarea"
-                    :rows="2"
-                    size="small"
-                  />
-                </div>
-                <div class="review-actions">
-                  <n-button
-                    size="small"
-                    @click="pendingData = { type: '', data: {} }"
-                    >取消</n-button
-                  >
-                  <n-button
-                    type="primary"
-                    size="small"
-                    @click="confirmAddData"
-                    :loading="addingData"
-                    >确认添加</n-button
-                  >
+            <div v-if="generatingMedia" class="message-item assistant">
+              <div class="message-body">
+                <div class="message-content-wrapper">
+                  <div class="media-generating-indicator">
+                    <div class="media-generating-spinner"></div>
+                    <div class="media-generating-info">
+                      <span class="media-generating-title">
+                        {{ mediaType === 'image' ? '正在生成图片' : '正在生成视频' }}
+                      </span>
+                      <span class="media-generating-desc">{{ mediaPrompt }}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
+
+
           </div>
         </div>
       </div>
@@ -344,21 +203,12 @@
       <div class="input-area">
         <div class="input-area-center">
           <div class="input-toolbar">
-            <n-dropdown :options="templateOptions" @select="handleTemplateSelect">
-              <n-button size="small" quaternary>
+            <n-dropdown :options="modelOptions" @select="handleModelSelect" v-if="enabledModels.length > 0">
+              <n-button size="small" quaternary class="model-select-btn">
                 <template #icon>
-                  <n-icon><DocumentTextOutline /></n-icon>
+                  <n-icon><HardwareChipOutline /></n-icon>
                 </template>
-                {{ currentTemplate ? currentTemplate.name : "提示词模板" }}
-                <n-icon size="12" style="margin-left: 4px"><ChevronDownOutline /></n-icon>
-              </n-button>
-            </n-dropdown>
-            <n-dropdown :options="agentOptions" @select="handleAgentSelect">
-              <n-button size="small" quaternary>
-                <template #icon>
-                  <n-icon><RocketOutline /></n-icon>
-                </template>
-                {{ currentAgent ? currentAgent.label : "智能体" }}
+                <span class="model-select-label">{{ selectedModel ? selectedModel.name : "选择模型" }}</span>
                 <n-icon size="12" style="margin-left: 4px"><ChevronDownOutline /></n-icon>
               </n-button>
             </n-dropdown>
@@ -367,6 +217,19 @@
                 <n-icon><LinkOutline /></n-icon>
               </template>
               引用数据
+            </n-button>
+            <n-divider vertical style="height: 20px; margin: 0 4px" />
+            <n-button size="small" quaternary @click="startGenerateMedia('image')" :disabled="generatingMedia">
+              <template #icon>
+                <n-icon><ImageOutline /></n-icon>
+              </template>
+              生成图片
+            </n-button>
+            <n-button size="small" quaternary @click="startGenerateMedia('video')" :disabled="generatingMedia">
+              <template #icon>
+                <n-icon><VideocamOutline /></n-icon>
+              </template>
+              生成视频
             </n-button>
           </div>
           <div v-if="selectedReferences.length > 0" class="selected-references">
@@ -415,8 +278,10 @@
               </n-button>
             </div>
           </div>
-          <div class="input-row">
+          <!-- Chat input mode -->
+          <div v-if="!mediaMode" class="input-row">
             <n-button
+              v-if="selectedModel && selectedModel.category === 'vision'"
               circle
               size="large"
               quaternary
@@ -460,6 +325,40 @@
             >
               <template #icon>
                 <n-icon><SendOutline /></n-icon>
+              </template>
+            </n-button>
+          </div>
+          <!-- Media generation mode -->
+          <div v-else class="media-input-row">
+            <n-input
+              class="input-textarea"
+              v-model:value="mediaPrompt"
+              type="textarea"
+              size="large"
+              :placeholder="mediaType === 'image' ? '请输入图片描述，如：一只可爱的橘猫在阳光下打盹' : '请输入视频描述'"
+              :autosize="{ minRows: 1, maxRows: 4 }"
+              clearable
+            />
+            <n-button
+              type="primary"
+              circle
+              size="large"
+              :loading="generatingMedia"
+              :disabled="!mediaPrompt.trim()"
+              @click="confirmGenerateMedia"
+            >
+              <template #icon>
+                <n-icon size="20"><SparklesOutline /></n-icon>
+              </template>
+            </n-button>
+            <n-button
+              circle
+              size="large"
+              @click="cancelMediaMode"
+              :disabled="generatingMedia"
+            >
+              <template #icon>
+                <n-icon><CloseOutline /></n-icon>
               </template>
             </n-button>
           </div>
@@ -664,67 +563,6 @@
         </div>
       </n-modal>
 
-      <n-modal
-        v-model:show="showTemplateModal"
-        preset="card"
-        title="提示词模板管理"
-        style="width: 700px"
-      >
-        <div class="template-modal-content">
-          <n-space vertical size="large">
-            <div class="template-list">
-              <div
-                v-for="template in templates"
-                :key="template.id"
-                class="template-item"
-                :class="{ active: currentTemplate?.id === template.id }"
-                @click="selectTemplate(template)"
-              >
-                <div class="template-info">
-                  <div class="template-name">{{ template.name }}</div>
-                  <div class="template-desc">{{ template.description }}</div>
-                </div>
-                <n-button
-                  v-if="!template.is_default"
-                  text
-                  type="error"
-                  size="small"
-                  @click.stop="deleteTemplate(template.id)"
-                >
-                  删除
-                </n-button>
-              </div>
-            </div>
-            <n-divider />
-            <n-form :model="newTemplate" label-placement="left">
-              <n-form-item label="名称">
-                <n-input v-model:value="newTemplate.name" placeholder="模板名称" />
-              </n-form-item>
-              <n-form-item label="分类">
-                <n-select
-                  v-model:value="newTemplate.category"
-                  :options="templateCategoryOptions"
-                  placeholder="选择分类"
-                />
-              </n-form-item>
-              <n-form-item label="描述">
-                <n-input v-model:value="newTemplate.description" placeholder="模板描述" />
-              </n-form-item>
-              <n-form-item label="内容">
-                <n-input
-                  v-model:value="newTemplate.content"
-                  type="textarea"
-                  :rows="4"
-                  placeholder="提示词内容"
-                />
-              </n-form-item>
-              <n-button type="primary" @click="createTemplate" :disabled="!newTemplate.name || !newTemplate.content">
-              添加模板
-            </n-button>
-          </n-form>
-        </n-space>
-      </div>
-    </n-modal>
 
     <n-modal
       v-model:show="showImagePreview"
@@ -749,36 +587,22 @@ import {
   NButton,
   NSpace,
   NIcon,
-  NAvatar,
   NInput,
   NText,
   NTag,
-  NSpin,
   NModal,
   NTabs,
   NTabPane,
-  NList,
-  NListItem,
-  NThing,
   NEmpty,
   NScrollbar,
   NDropdown,
-  NAlert,
-  NForm,
-  NFormItem,
-  NSelect,
-  NDynamicTags,
-  NSlider,
-  NInputNumber,
   NDivider,
   useMessage
 } from "naive-ui";
 import {
-  TimeOutline,
   AddOutline,
   TrashOutline,
   ChatbubblesOutline,
-  PersonOutline,
   SparklesOutline,
   SendOutline,
   LinkOutline,
@@ -789,36 +613,24 @@ import {
   GlobeOutline,
   CodeSlashOutline,
   DocumentOutline,
-  RocketOutline,
   ChevronDownOutline,
-  CheckmarkOutline,
   CreateOutline,
   DownloadOutline,
   StopOutline,
   EllipsisVertical,
-  SettingsOutline,
-  DocumentTextOutline,
   ImageOutline,
-  CloseOutline
+  CloseOutline,
+  HardwareChipOutline,
+  VideocamOutline,
 } from "@vicons/ionicons5";
 import { aiMessageApi } from "../api/ai-message";
+import { aiModelsApi } from "../api/ai-models";
+import { aiApi } from "../api/ai";
 import { websiteApi } from "../api/website";
 import { passwordApi } from "../api/password";
 import { snippetApi } from "../api/snippet";
 import { documentApi } from "../api/documents";
-import { promptTemplateApi } from "../api/prompt-templates";
 import MessageContent from "../components/MessageContent.vue";
-import { useDataStore } from "../store/data";
-
-const dataStore = useDataStore();
-const {
-  addSnippet,
-  addDocument,
-  addWebsite,
-  reloadSnippets,
-  reloadDocuments,
-  reloadWebsites
-} = dataStore;
 
 const message = useMessage();
 const messages = ref([]);
@@ -852,6 +664,11 @@ const getImagePreviewSrc = (image) => {
 };
 const uploadingImage = ref(false);
 
+const enabledModels = ref([]);
+const MODEL_STORAGE_KEY = 'nexious_selected_model_id'
+
+const selectedModel = ref(null);
+
 const websites = ref([]);
 const passwords = ref([]);
 const snippets = ref([]);
@@ -862,93 +679,37 @@ const passwordSearch = ref("");
 const snippetSearch = ref("");
 const documentSearch = ref("");
 
-const currentAgent = ref(null);
-const pendingData = ref({ type: "", data: {} });
-const addingData = ref(false);
 const quotedMessage = ref(null);
 
-const templates = ref([]);
-const currentTemplate = ref(null);
-const showTemplateModal = ref(false);
-const newTemplate = ref({
-  name: "",
-  category: "general",
-  content: "",
-  description: ""
-});
 
-const categories = ref([]);
-const folders = ref([]);
+const mediaMode = ref(null);
+const mediaPrompt = ref('');
+const mediaType = ref('image');
+const generatingMedia = ref(false);
 
-const languageOptions = [
-  { label: "JavaScript", value: "javascript" },
-  { label: "TypeScript", value: "typescript" },
-  { label: "Python", value: "python" },
-  { label: "Java", value: "java" },
-  { label: "C", value: "c" },
-  { label: "C++", value: "cpp" },
-  { label: "C#", value: "csharp" },
-  { label: "Go", value: "go" },
-  { label: "Rust", value: "rust" },
-  { label: "PHP", value: "php" },
-  { label: "Ruby", value: "ruby" },
-  { label: "Swift", value: "swift" },
-  { label: "Kotlin", value: "kotlin" },
-  { label: "SQL", value: "sql" },
-  { label: "HTML", value: "html" },
-  { label: "CSS", value: "css" },
-  { label: "Shell", value: "shell" },
-  { label: "Other", value: "other" }
-];
 
-const categoryOptions = computed(() => {
-  return categories.value.map((c) => ({ label: c.name, value: c.name }));
-});
-
-const folderOptions = computed(() => {
-  return folders.value.map((f) => ({ label: f.name, value: f.id }));
-});
-
-const templateOptions = computed(() => {
-  const options = templates.value.map((t) => ({
-    label: t.name,
-    key: t.id,
-    icon: () => h("span", t.category === "coding" ? "💻" : t.category === "writing" ? "📝" : t.category === "translation" ? "🌐" : "🤖")
-  }));
-  options.push({ type: "divider" });
-  options.push({
-    label: "管理模板",
-    key: "manage",
-    icon: () => h(NIcon, null, { default: () => h(SettingsOutline) })
-  });
-  return options;
-});
-
-const templateCategoryOptions = computed(() => {
-  const cats = ["general", "coding", "writing", "translation", "analysis"];
-  return cats.map((c) => ({
-    label: c === "general" ? "通用" : c === "coding" ? "编程" : c === "writing" ? "写作" : c === "translation" ? "翻译" : "分析",
-    value: c
-  }));
-});
-
-const agentOptions = [
-  {
-    label: "代码片段生成",
-    key: "snippet",
-    icon: () => h("span", "💻")
-  },
-  {
-    label: "文档生成",
-    key: "document",
-    icon: () => h("span", "📄")
-  },
-  {
-    label: "网站生成",
-    key: "website",
-    icon: () => h("span", "🌐")
+const modelOptions = computed(() => {
+  const filtered = enabledModels.value.filter((m) => {
+    if (mediaMode.value === 'image') return m.category === 'vision'
+    if (mediaMode.value === 'video') return m.category === 'video'
+    return m.category === 'text' || m.category === 'vision'
+  })
+  const options = filtered.map((m) => ({
+    label: m.name,
+    key: m.id
+  }))
+  if (options.length === 0) {
+    return [{ label: "暂无可用模型", key: "", disabled: true }]
   }
-];
+  return options
+});
+
+const categoryLabels = {
+  text: "文本模型",
+  vision: "视觉模型",
+  video: "视频模型",
+  audio: "音频模型"
+};
 
 const filteredWebsites = computed(() => {
   if (!websiteSearch.value) return websites.value;
@@ -1039,23 +800,17 @@ const formatDateShort = (dateStr) => {
 
 const loadData = async () => {
   try {
-    const [webRes, pwdRes, snpRes, docRes, catRes, folderRes] =
+    const [webRes, pwdRes, snpRes, docRes] =
       await Promise.all([
         websiteApi.getAll(),
         passwordApi.getAll(),
         snippetApi.getAll(),
-        documentApi.getAll(),
-        snippetApi.getCategories(),
-        documentApi.getAll({ folders: true })
+        documentApi.getAll()
       ]);
     websites.value = webRes.data.data || [];
     passwords.value = pwdRes.data.data || [];
     snippets.value = snpRes.data.data || [];
     documents.value = docRes.data.data || [];
-    categories.value = catRes.data.data || [];
-    if (folderRes.data.folders) {
-      folders.value = folderRes.data.folders;
-    }
   } catch (error) {
     console.error("加载数据失败:", error);
   }
@@ -1320,6 +1075,37 @@ const previewImage = (url) => {
   showImagePreview.value = true;
 };
 
+const handlePreviewImageFromContent = (url) => {
+  previewImageUrl.value = url;
+  showImagePreview.value = true;
+};
+
+const downloadMedia = async (url, filename) => {
+  try {
+    const isSameOrigin = url.startsWith('/') || url.startsWith(apiBase) || url.startsWith(location.origin)
+    const downloadUrl = isSameOrigin
+      ? url
+      : `${apiBase}/ai/proxy-download?url=${encodeURIComponent(url)}`
+
+    const response = await fetch(downloadUrl);
+    if (!response.ok) throw new Error('下载失败');
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+    message.success('下载成功');
+  } catch (error) {
+    console.error('下载失败:', error);
+    message.error('下载失败');
+    window.open(url, '_blank');
+  }
+};
+
 const quoteMessage = (msg) => {
   quotedMessage.value = {
     content: msg.content.substring(0, 200),
@@ -1334,6 +1120,121 @@ const copyMessage = async (content) => {
     message.success("已复制到剪贴板");
   } catch (error) {
     message.error("复制失败");
+  }
+};
+
+let previousModelId = null
+
+const startGenerateMedia = (type) => {
+  mediaType.value = type;
+  mediaPrompt.value = inputMessage.value || '';
+  mediaMode.value = type;
+
+  const requiredCategory = type === 'image' ? 'vision' : 'video'
+  if (selectedModel.value?.category !== requiredCategory) {
+    previousModelId = selectedModel.value?.id || null
+    const match = enabledModels.value.find((m) => m.category === requiredCategory)
+    if (match) {
+      selectedModel.value = match
+      localStorage.setItem(MODEL_STORAGE_KEY, match.id)
+    }
+  }
+};
+
+const cancelMediaMode = () => {
+  mediaMode.value = null;
+  mediaPrompt.value = '';
+  if (previousModelId) {
+    const prev = enabledModels.value.find((m) => m.id === previousModelId)
+    if (prev) {
+      selectedModel.value = prev
+      localStorage.setItem(MODEL_STORAGE_KEY, prev.id)
+    }
+    previousModelId = null
+  }
+};
+
+const confirmGenerateMedia = async () => {
+  const prompt = mediaPrompt.value.trim();
+  if (!prompt) {
+    message.warning('请输入描述内容');
+    return;
+  }
+
+  const requiredCategory = mediaType.value === 'image' ? 'vision' : 'video'
+  if (!selectedModel.value || selectedModel.value.category !== requiredCategory) {
+    message.warning(`请先选择${mediaType.value === 'image' ? '视觉' : '视频'}模型`)
+    return
+  }
+
+  mediaMode.value = null;
+  inputMessage.value = '';
+
+  messages.value.push({
+    role: 'user',
+    content: prompt,
+    references: [],
+    images: []
+  });
+  await saveMessage('user', prompt, []);
+
+  generatingMedia.value = true;
+
+  try {
+    if (mediaType.value === 'image') {
+      const res = await aiApi.generateImage({
+        prompt,
+        model_id: selectedModel.value?.id || undefined
+      });
+      const images = res.data?.data?.images || [];
+      if (images.length === 0) throw new Error('图片生成失败');
+      const imageContent = images.map((img, i) =>
+        `![${i === 0 ? '生成的图片' : `生成的图片 ${i + 1}`}](${img.url})`
+      ).join('\n\n');
+
+      messages.value.push({
+        role: 'assistant',
+        content: imageContent || '图片生成失败',
+        aiReferences: []
+      });
+      await saveMessage('assistant', imageContent || '图片生成失败', []);
+    } else {
+      const res = await aiApi.generateVideo({
+        prompt,
+        model_id: selectedModel.value?.id || undefined
+      });
+      const videos = res.data?.data?.videos || [];
+      if (videos.length === 0) throw new Error('视频生成失败');
+      const videoContent = videos.map((v, i) =>
+        v.url
+      ).join('\n\n');
+
+      messages.value.push({
+        role: 'assistant',
+        content: `视频已生成：\n\n${videoContent}`,
+        aiReferences: []
+      });
+      await saveMessage('assistant', `视频已生成：\n\n${videoContent}`, []);
+    }
+  } catch (error) {
+    console.error('生成失败:', error);
+    message.error(error.message || '生成失败');
+    messages.value.push({
+      role: 'assistant',
+      content: `生成失败：${error.message || '请检查 API 配置'}`
+    });
+    await saveMessage('assistant', `生成失败：${error.message || '请检查 API 配置'}`, []);
+  } finally {
+    generatingMedia.value = false;
+    if (previousModelId) {
+      const prev = enabledModels.value.find((m) => m.id === previousModelId)
+      if (prev) {
+        selectedModel.value = prev
+        localStorage.setItem(MODEL_STORAGE_KEY, prev.id)
+      }
+      previousModelId = null
+    }
+    scrollToBottom();
   }
 };
 
@@ -1417,7 +1318,6 @@ const sendMessage = async () => {
   abortController.value = new AbortController();
 
   try {
-    const systemPrompt = getAgentSystemPrompt() || currentTemplate.value?.content || "";
 
     let aiContent = "";
     let aiReferences = [];
@@ -1444,9 +1344,9 @@ const sendMessage = async () => {
             images: m.images || []
           })),
           stream: true,
-          systemPrompt: systemPrompt || undefined,
           continueFrom: continueFrom,
-          images
+          images,
+          model_id: selectedModel.value?.id || undefined
         }),
         signal: abortController.value.signal
       });
@@ -1505,20 +1405,6 @@ const sendMessage = async () => {
       aiContent = "抱歉，我无法处理您的请求。";
     }
 
-    if (currentAgent.value) {
-      const parsedData = parseAgentResponse(aiContent);
-      if (parsedData) {
-        pendingData.value = parsedData;
-        const displayContent = formatAgentDisplayContent(
-          parsedData.data,
-          parsedData.type
-        );
-        if (displayContent) {
-          aiContent = displayContent;
-        }
-      }
-    }
-
     messages.value.push({
       role: "assistant",
       content: aiContent,
@@ -1573,304 +1459,48 @@ const handleKeydown = (e) => {
   }
 };
 
-const handleAgentSelect = (key) => {
-  const agents = {
-    snippet: { key: "snippet", label: "代码片段生成" },
-    document: { key: "document", label: "文档生成" },
-    website: { key: "website", label: "网站生成" }
-  };
-  currentAgent.value = agents[key];
-  message.info(`已切换到「${agents[key].label}」智能体`);
-};
 
-const handleTemplateSelect = (key) => {
-  if (key === "manage") {
-    showTemplateModal.value = true;
-    return;
-  }
-  const template = templates.value.find((t) => t.id === key);
-  if (template) {
-    currentTemplate.value = template;
-    message.info(`已选择「${template.name}」模板`);
-  }
-};
-
-const selectTemplate = (template) => {
-  currentTemplate.value = template;
-  showTemplateModal.value = false;
-};
-
-const loadTemplates = async () => {
+const loadEnabledModels = async () => {
   try {
-    const response = await promptTemplateApi.getAll();
-    templates.value = response.data.data || [];
-    const defaultTemplate = templates.value.find((t) => t.is_default);
-    if (defaultTemplate && !currentTemplate.value) {
-      currentTemplate.value = defaultTemplate;
+    const response = await aiModelsApi.getEnabled();
+    enabledModels.value = response.data.data || [];
+
+    const savedId = localStorage.getItem(MODEL_STORAGE_KEY)
+    if (savedId) {
+      const saved = enabledModels.value.find((m) => m.id === savedId)
+      if (saved) {
+        selectedModel.value = saved
+        return
+      }
+    }
+
+    if (!selectedModel.value && enabledModels.value.length > 0) {
+      const chatModels = enabledModels.value.filter((m) => m.category === 'text' || m.category === 'vision')
+      const defaultModel = chatModels.find((m) => m.is_default);
+      selectedModel.value = defaultModel || chatModels[0];
     }
   } catch (error) {
-    console.error("加载模板失败:", error);
+    console.error("加载模型列表失败:", error);
   }
 };
 
-const createTemplate = async () => {
-  if (!newTemplate.value.name || !newTemplate.value.content) {
-    message.warning("请填写模板名称和内容");
-    return;
-  }
-  try {
-    await promptTemplateApi.create(newTemplate.value);
-    message.success("模板创建成功");
-    newTemplate.value = { name: "", category: "general", content: "", description: "" };
-    loadTemplates();
-  } catch (error) {
-    message.error("创建失败");
+const handleModelSelect = (key) => {
+  const model = enabledModels.value.find((m) => m.id === key);
+  if (model) {
+    selectedModel.value = model;
+    localStorage.setItem(MODEL_STORAGE_KEY, model.id)
+    message.info(`已切换到「${model.name}」`);
   }
 };
 
-const deleteTemplate = async (id) => {
-  try {
-    await promptTemplateApi.delete(id);
-    message.success("删除成功");
-    if (currentTemplate.value?.id === id) {
-      currentTemplate.value = templates.value.find((t) => t.is_default) || null;
-    }
-    loadTemplates();
-  } catch (error) {
-    message.error(error.response?.data?.error || "删除失败");
-  }
-};
 
-const getAgentSystemPrompt = () => {
-  if (!currentAgent.value) return "";
 
-  const prompts = {
-    snippet: `你是一个代码片段生成智能体。当用户请求生成代码时，你需要返回一个 JSON 格式的代码片段数据。
-返回格式必须是纯 JSON，不要包含任何其他文字说明：
-{
-  "title": "代码片段标题",
-  "language": "编程语言（如 javascript, python, typescript 等）",
-  "category": "分类名称",
-  "description": "代码片段描述",
-  "code": "代码内容",
-  "tags": ["标签1", "标签2"]
-}`,
-    document: `你是一个文档生成智能体。当用户请求生成文档时，你需要返回一个 JSON 格式的文档数据。
-返回格式必须是纯 JSON，不要包含任何其他文字说明：
-{
-  "title": "文档标题",
-  "content": "文档内容（支持 Markdown 格式）",
-  "tags": ["标签1", "标签2"]
-}`,
-    website: `你是一个网站生成智能体。当用户请求生成网站信息时，你需要返回一个 JSON 格式的网站数据。
-返回格式必须是纯 JSON，不要包含任何其他文字说明：
-{
-  "name": "网站名称",
-  "url": "网站地址",
-  "alias": "网站别名（可选）",
-  "description": "网站描述"
-}`
-  };
-  return prompts[currentAgent.value.key] || "";
-};
 
-const parseAgentResponse = (content) => {
-  if (!currentAgent.value) return null;
-
-  try {
-    let jsonStr = "";
-    let braceCount = 0;
-    let startIndex = -1;
-    let inString = false;
-    let escapeNext = false;
-
-    for (let i = 0; i < content.length; i++) {
-      const char = content[i];
-
-      if (escapeNext) {
-        escapeNext = false;
-        continue;
-      }
-
-      if (char === "\\") {
-        escapeNext = true;
-        continue;
-      }
-
-      if (char === '"') {
-        inString = !inString;
-      }
-
-      if (!inString) {
-        if (char === "{") {
-          if (braceCount === 0) {
-            startIndex = i;
-          }
-          braceCount++;
-        } else if (char === "}") {
-          braceCount--;
-          if (braceCount === 0 && startIndex >= 0) {
-            jsonStr = content.substring(startIndex, i + 1);
-            break;
-          }
-        }
-      }
-    }
-
-    if (!jsonStr) return null;
-
-    try {
-      const data = JSON.parse(jsonStr);
-
-      const cleanedData = { ...data };
-      for (const key in cleanedData) {
-        if (typeof cleanedData[key] === "string") {
-          cleanedData[key] = cleanedData[key].trim();
-        }
-      }
-
-      return {
-        type: currentAgent.value.key,
-        data: {
-          ...cleanedData,
-          tags: cleanedData.tags || []
-        }
-      };
-    } catch (parseError) {
-      jsonStr = jsonStr
-        .replace(
-          /"(\w+)"\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*([,}])/g,
-          '"$1": "$2"$3'
-        )
-        .replace(
-          /"(\w+)"\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*([,}])/g,
-          '"$1": "$2"$3'
-        );
-
-      const data = JSON.parse(jsonStr);
-
-      const cleanedData = { ...data };
-      for (const key in cleanedData) {
-        if (typeof cleanedData[key] === "string") {
-          cleanedData[key] = cleanedData[key].trim();
-        }
-      }
-
-      return {
-        type: currentAgent.value.key,
-        data: {
-          ...cleanedData,
-          tags: cleanedData.tags || []
-        }
-      };
-    }
-  } catch (e) {
-    console.error("解析智能体响应失败:", e);
-    return null;
-  }
-};
-
-const formatAgentDisplayContent = (data, type) => {
-  let lines = [];
-
-  if (type === "snippet") {
-    lines.push("**代码片段已生成**");
-    if (data.title) lines.push(`**标题：** ${data.title}`);
-    if (data.language) lines.push(`**语言：** ${data.language}`);
-    if (data.category) lines.push(`**分类：** ${data.category}`);
-    if (data.description) lines.push(`**描述：** ${data.description}`);
-    if (data.code) {
-      lines.push(`**代码：**`);
-      lines.push("```" + (data.language || "javascript"));
-      lines.push(data.code);
-      lines.push("```");
-    }
-    if (data.tags && data.tags.length > 0) {
-      lines.push(`**标签：** ${data.tags.join(", ")}`);
-    }
-  } else if (type === "document") {
-    lines.push("**文档已生成**");
-    if (data.title) lines.push(`**标题：** ${data.title}`);
-    if (data.content) {
-      lines.push(`**内容：**`);
-      lines.push(data.content);
-    }
-    if (data.tags && data.tags.length > 0) {
-      lines.push(`**标签：** ${data.tags.join(", ")}`);
-    }
-  } else if (type === "website") {
-    lines.push("**网站信息已生成**");
-    if (data.name) lines.push(`**名称：** ${data.name}`);
-    if (data.url) lines.push(`**URL：** ${data.url}`);
-    if (data.alias) lines.push(`**别名：** ${data.alias}`);
-    if (data.description) lines.push(`**描述：** ${data.description}`);
-  }
-
-  return lines.join("\n");
-};
-
-const confirmAddData = async () => {
-  addingData.value = true;
-  try {
-    const { type, data } = pendingData.value;
-
-    if (type === "snippet") {
-      const res = await snippetApi.create({
-        title: data.title,
-        language: data.language,
-        category: data.category,
-        description: data.description,
-        code: data.code,
-        tags: data.tags
-      });
-      if (res.data?.data) {
-        addSnippet(res.data.data);
-      } else {
-        await reloadSnippets();
-      }
-      message.success("代码片段添加成功");
-    } else if (type === "document") {
-      const res = await documentApi.create({
-        title: data.title,
-        content: data.content,
-        folder_id: data.folder_id || null,
-        tags: data.tags
-      });
-      if (res.data?.data) {
-        addDocument(res.data.data);
-      } else {
-        await reloadDocuments();
-      }
-      message.success("文档添加成功");
-    } else if (type === "website") {
-      const res = await websiteApi.create({
-        name: data.name,
-        url: data.url,
-        alias: data.alias || null,
-        description: data.description
-      });
-      if (res.data?.data) {
-        addWebsite(res.data.data);
-      } else {
-        await reloadWebsites();
-      }
-      message.success("网站添加成功");
-    }
-
-    pendingData.value = { type: "", data: {} };
-    await loadData();
-  } catch (error) {
-    console.error("添加数据失败:", error);
-    message.error("添加数据失败");
-  } finally {
-    addingData.value = false;
-  }
-};
 
 onMounted(() => {
   loadData();
   loadConversations();
-  loadTemplates();
+  loadEnabledModels();
   scrollToBottom();
 });
 </script>
@@ -2216,10 +1846,25 @@ onMounted(() => {
   gap: 8px;
   margin-bottom: 12px;
   flex-wrap: wrap;
+  min-height: 32px;
 }
 
 .input-toolbar .n-button {
   font-size: 12px;
+  flex-shrink: 0;
+}
+
+.model-select-btn {
+  min-width: 100px;
+}
+
+.model-select-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .selected-references {
@@ -2233,7 +1878,8 @@ onMounted(() => {
   margin-bottom: 10px;
 }
 
-.input-row {
+.input-row,
+.media-input-row {
   display: flex;
   gap: 12px;
   align-items: flex-end;
@@ -2355,121 +2001,6 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-.review-modal-content {
-  min-height: 300px;
-}
-
-.review-section {
-  margin-top: 8px;
-}
-
-.inline-review {
-  background: var(--card-bg);
-  border: 1px solid var(--primary-color);
-  border-radius: 12px;
-  padding: 16px;
-  margin-top: 16px;
-}
-
-.inline-review-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  color: var(--primary-color);
-}
-
-.inline-review-title {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.inline-review-subtitle {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-left: auto;
-}
-
-.inline-review-content {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.review-field {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.review-label {
-  font-size: 13px;
-  color: var(--text-secondary);
-  min-width: 50px;
-  flex-shrink: 0;
-}
-
-.review-field .n-input,
-.review-field .n-select {
-  flex: 1;
-}
-
-.review-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 8px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-color);
-}
-
-.template-modal-content {
-  padding: 8px 0;
-}
-
-.template-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.template-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid var(--border-color);
-}
-
-.template-item:hover {
-  background: var(--primary-light);
-  border-color: var(--primary-color);
-}
-
-.template-item.active {
-  background: var(--primary-light);
-  border-color: var(--primary-color);
-}
-
-.template-info {
-  flex: 1;
-}
-
-.template-name {
-  font-weight: 500;
-  font-size: 14px;
-}
-
-.template-desc {
-  font-size: 12px;
-  color: var(--text-color-3);
-  margin-top: 4px;
-}
 
 .selected-images {
   display: flex;
@@ -2509,21 +2040,138 @@ onMounted(() => {
 .message-images {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.message-image-wrapper {
+  position: relative;
+  display: inline-block;
 }
 
 .message-image {
-  max-width: 240px;
-  max-height: 240px;
+  max-width: 280px;
+  max-height: 280px;
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .message-image:hover {
   transform: scale(1.02);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.image-download-btn {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.message-image-wrapper:hover .image-download-btn {
+  opacity: 1;
+}
+
+.thinking-indicator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-color);
+  border-radius: 12px;
+}
+
+.thinking-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.thinking-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  animation: thinking-bounce 1.4s ease-in-out infinite both;
+}
+
+.thinking-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0s;
+}
+
+@keyframes thinking-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.thinking-text {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* ── Media generation indicator ── */
+.media-generating-indicator {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  background: var(--bg-color);
+  border-radius: 12px;
+  min-width: 240px;
+}
+
+.media-generating-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: media-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes media-spin {
+  to { transform: rotate(360deg); }
+}
+
+.media-generating-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.media-generating-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.media-generating-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 280px;
 }
 
 @media (max-width: 1024px) {
@@ -2556,7 +2204,8 @@ onMounted(() => {
     padding: 12px;
   }
   
-  .input-row {
+  .input-row,
+  .media-input-row {
     padding: 6px 10px;
   }
 }
@@ -2619,7 +2268,8 @@ onMounted(() => {
     font-size: 11px;
   }
   
-  .input-row {
+  .input-row,
+  .media-input-row {
     padding: 6px 8px;
     gap: 8px;
   }

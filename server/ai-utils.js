@@ -1,4 +1,4 @@
-import { queryOne } from './db.js'
+import { queryOne, query } from './db.js'
 
 const PROVIDER_CONFIGS = {
   openai: {
@@ -58,6 +58,62 @@ const PROVIDER_CONFIGS = {
   }
 }
 
+const IMAGE_GEN_CONFIGS = {
+  openai: {
+    url: 'https://api.openai.com/v1/images/generations',
+    size: '1024x1024',
+    quality: 'standard'
+  },
+  zhipu: {
+    url: 'https://open.bigmodel.cn/api/paas/v4/images/generations'
+  },
+  siliconflow: {
+    url: 'https://api.siliconflow.cn/v1/images/generations'
+  },
+  openrouter: {
+    url: 'https://openrouter.ai/api/v1/images/generations'
+  },
+  custom: {
+    url: ''
+  }
+}
+
+const IMAGE_GEN_FALLBACK = {
+  url: '/images/generations',
+  size: '1024x1024'
+}
+
+const VIDEO_GEN_CONFIGS = {
+  openai: {
+    url: 'https://api.openai.com/v1/video/generations'
+  },
+  zhipu: {
+    url: 'https://open.bigmodel.cn/api/paas/v4/videos/generations'
+  },
+  siliconflow: {
+    url: 'https://api.siliconflow.cn/v1/video/generations'
+  },
+  openrouter: {
+    url: 'https://openrouter.ai/api/v1/video/generations'
+  },
+  custom: {
+    url: ''
+  }
+}
+
+const VIDEO_GEN_FALLBACK = {
+  url: '/video/generations'
+}
+
+const MODEL_CATEGORIES = ['text', 'vision', 'video', 'audio']
+
+const CATEGORY_LABELS = {
+  text: '文本模型',
+  vision: '视觉模型',
+  video: '视频模型',
+  audio: '音频模型'
+}
+
 const GENERIC_VISION_MODEL_HINTS = [
   'vl',
   'vision',
@@ -78,7 +134,15 @@ const GENERIC_VISION_MODEL_HINTS = [
   'minicpm-v',
   'internvl',
   'llava',
-  'pixtral'
+  'pixtral',
+  'cogview',
+  'dall-e',
+  'sora',
+  'kling',
+  'pika',
+  'runway',
+  'stable-diffusion',
+  'midjourney'
 ]
 
 const PROVIDER_VISION_PATTERNS = {
@@ -97,9 +161,9 @@ const PROVIDER_VISION_PATTERNS = {
     'internvl',
     'minicpm-v'
   ],
-  zhipu: ['glm-4v', 'glm-4.1v', 'glm-4.5v'],
+  zhipu: ['glm-4v', 'glm-4.1v', 'glm-4.5v', 'cogview'],
   aliyun: ['qwen-vl', 'qvq', 'qwen2.5-vl', 'qwen-vl-max', 'qwen-vl-plus'],
-  openai: ['gpt-4o', 'gpt-4.1'],
+  openai: ['gpt-4o', 'gpt-4.1', 'dall-e'],
   openrouter: [
     'gpt-4o',
     'gpt-4.1',
@@ -126,25 +190,57 @@ export const getDefaultAiModel = async () => {
   const model = await queryOne('SELECT * FROM ai_models WHERE is_enabled = 1 AND is_default = 1')
   if (model) {
     return {
+      id: model.id,
       provider: model.provider,
       api_key: model.api_key,
       base_url: model.base_url,
-      model: model.model
+      model: model.model,
+      category: model.category || 'text'
     }
   }
-  
+
   const enabledModel = await queryOne('SELECT * FROM ai_models WHERE is_enabled = 1 ORDER BY created_at ASC LIMIT 1')
   if (enabledModel) {
     return {
+      id: enabledModel.id,
       provider: enabledModel.provider,
       api_key: enabledModel.api_key,
       base_url: enabledModel.base_url,
-      model: enabledModel.model
+      model: enabledModel.model,
+      category: enabledModel.category || 'text'
     }
   }
-  
+
   return null
 }
+
+export const getEnabledAiModels = async (category = null) => {
+  let sql = 'SELECT * FROM ai_models WHERE is_enabled = 1 ORDER BY is_default DESC, created_at DESC'
+  const rows = await query(sql)
+  if (category) {
+    return rows.filter(r => (r.category || 'text') === category)
+  }
+  return rows
+}
+
+export const getAiModelById = async (id) => {
+  const model = await queryOne('SELECT * FROM ai_models WHERE id = ?', [id])
+  if (model) {
+    return {
+      id: model.id,
+      provider: model.provider,
+      api_key: model.api_key,
+      base_url: model.base_url,
+      model: model.model,
+      category: model.category || 'text'
+    }
+  }
+  return null
+}
+
+export const getModelCategories = () => [...MODEL_CATEGORIES]
+
+export const getCategoryLabel = (category) => CATEGORY_LABELS[category] || category
 
 export const getProviderConfig = (provider, base_url, model) => {
   const preset = PROVIDER_CONFIGS[provider] || PROVIDER_CONFIGS.custom
@@ -161,6 +257,41 @@ export const getProviderConfig = (provider, base_url, model) => {
     model: model || preset.model,
     type: preset.type
   }
+}
+
+export const getImageGenConfig = (provider, base_url) => {
+  const preset = IMAGE_GEN_CONFIGS[provider]
+
+  if (preset && preset.url) {
+    return {
+      url: preset.url,
+      size: preset.size || IMAGE_GEN_FALLBACK.size,
+      quality: preset.quality
+    }
+  }
+
+  if (base_url) {
+    return {
+      url: `${base_url}${IMAGE_GEN_FALLBACK.url}`,
+      size: IMAGE_GEN_FALLBACK.size
+    }
+  }
+
+  return null
+}
+
+export const getVideoGenConfig = (provider, base_url) => {
+  const preset = VIDEO_GEN_CONFIGS[provider]
+
+  if (preset && preset.url) {
+    return { url: preset.url }
+  }
+
+  if (base_url) {
+    return { url: `${base_url}${VIDEO_GEN_FALLBACK.url}` }
+  }
+
+  return null
 }
 
 export const supportsVisionInput = (provider, model = '') => {

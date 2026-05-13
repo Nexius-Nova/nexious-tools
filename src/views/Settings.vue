@@ -77,7 +77,7 @@
         <n-space vertical>
           <n-space justify="space-between" align="center">
             <n-text depth="3">
-              配置多个大模型API，启用哪个模型系统就使用哪个模型
+              配置多个大模型API，可启用多个模型，但只有一个默认模型（其他功能使用时默认选择）
             </n-text>
             <n-button type="primary" size="small" @click="openAddModel">
               <template #icon>
@@ -160,6 +160,14 @@
                 </n-text>
               </div>
             </div>
+          </n-form-item>
+
+          <n-form-item label="模型类别" required>
+            <n-select
+              v-model:value="modelForm.category"
+              :options="categoryOptions"
+              placeholder="选择模型类别"
+            />
           </n-form-item>
 
           <n-form-item label="模型名称" required>
@@ -263,7 +271,7 @@
           <n-descriptions-item label="应用名称">
             Nexious Tools
           </n-descriptions-item>
-          <n-descriptions-item label="版本号"> v1.0.3 </n-descriptions-item>
+          <n-descriptions-item label="版本号"> v2.0.0 </n-descriptions-item>
           <n-descriptions-item label="技术栈">
             Electron + Vue3
           </n-descriptions-item>
@@ -351,7 +359,8 @@ const modelForm = reactive({
   provider: "openai",
   api_key: "",
   base_url: "",
-  model: ""
+  model: "",
+  category: "text"
 });
 const modelTesting = ref(false);
 const showApiKey = ref(false);
@@ -382,6 +391,13 @@ const providerLabels = {
   siliconflow: "硅基流动",
   custom: "自定义"
 };
+
+const categoryOptions = [
+  { label: "文本模型", value: "text" },
+  { label: "视觉模型", value: "vision" },
+  { label: "视频模型", value: "video" },
+  { label: "音频模型", value: "audio" }
+];
 
 const providerPresets = {
   openai: {
@@ -537,6 +553,20 @@ const modelColumns = [
   {
     title: "模型",
     key: "model"
+  },
+  {
+    title: "类别",
+    key: "category",
+    width: 90,
+    render: (row) => {
+      const labels = {
+        text: "文本",
+        vision: "视觉",
+        video: "视频",
+        audio: "音频"
+      }
+      return labels[row.category] || row.category || "文本"
+    }
   },
   {
     title: "状态",
@@ -759,7 +789,8 @@ const openAddModel = () => {
     provider: "openai",
     api_key: "",
     base_url: providerPresets.openai.base_url,
-    model: providerPresets.openai.default_model
+    model: providerPresets.openai.default_model,
+    category: "text"
   });
   currentModelOptions.value = providerPresets.openai.models;
   isCustomModel.value = false;
@@ -773,7 +804,8 @@ const openEditModel = (model) => {
     provider: model.provider,
     api_key: model.api_key,
     base_url: model.base_url || "",
-    model: model.model
+    model: model.model,
+    category: model.category || "text"
   });
   const preset = providerPresets[model.provider];
   if (preset) {

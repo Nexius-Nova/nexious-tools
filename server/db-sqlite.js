@@ -216,6 +216,7 @@ const migrations = [
           api_key TEXT NOT NULL,
           base_url VARCHAR(500),
           model VARCHAR(100) NOT NULL,
+          category VARCHAR(50) DEFAULT 'text',
           is_enabled INTEGER DEFAULT 1,
           is_default INTEGER DEFAULT 0,
           temperature REAL DEFAULT 0.7,
@@ -275,8 +276,7 @@ const migrations = [
     name: "addDefaultData",
     up: () => {
       const defaultTemplates = [
-        { name: "通用助手", category: "general", content: "你是一个智能助手，可以帮助用户解答问题、提供建议和完成各种任务。请用中文回答问题，回答要简洁、准确、有帮助。", description: "适用于一般性问答和任务", is_default: 1 },
-        { name: "代码专家", category: "coding", content: "你是一个资深的编程专家，精通多种编程语言和框架。请用中文回答编程相关的问题，提供清晰的代码示例和详细的解释。代码要遵循最佳实践，包含必要的注释。", description: "适用于编程问题和技术咨询", is_default: 0 },
+        { name: "代码专家", category: "coding", content: "你是一个资深的编程专家，精通多种编程语言和框架。请用中文回答编程相关的问题，提供清晰的代码示例和详细的解释。代码要遵循最佳实践，包含必要的注释。", description: "适用于编程问题和技术咨询", is_default: 1 },
         { name: "文档写作", category: "writing", content: "你是一个专业的文档写作助手，擅长撰写各类技术文档、教程和说明。请用中文撰写内容，确保结构清晰、语言流畅、格式规范。使用Markdown格式输出。", description: "适用于文档撰写和内容创作", is_default: 0 },
         { name: "翻译助手", category: "translation", content: "你是一个专业的翻译助手，精通中文、英文、日文等多种语言。请准确翻译用户提供的内容，保持原文的语气和风格。如无特别说明，默认翻译为中文。", description: "适用于文本翻译", is_default: 0 },
         { name: "数据分析", category: "analysis", content: "你是一个数据分析专家，擅长数据处理、统计分析和可视化。请用中文回答数据分析相关的问题，提供清晰的分析思路和具体的操作步骤。", description: "适用于数据分析和处理", is_default: 0 },
@@ -304,6 +304,32 @@ const migrations = [
         const existing = queryOne("SELECT id FROM settings WHERE key = ?", [setting.key]);
         if (!existing) {
           db.run("INSERT INTO settings (key, value) VALUES (?, ?)", [setting.key, setting.value]);
+        }
+      }
+    }
+  },
+  {
+    version: 3,
+    name: "addAiModelCategory",
+    up: () => {
+      const tableInfo = query("PRAGMA table_info(ai_models)");
+      const hasCategory = tableInfo.some(col => col.name === "category");
+      if (!hasCategory) {
+        db.run("ALTER TABLE ai_models ADD COLUMN category VARCHAR(50) DEFAULT 'text'");
+      }
+    }
+  },
+  {
+    version: 4,
+    name: "removeGeneralAssistantTemplate",
+    up: () => {
+      db.run("DELETE FROM prompt_templates WHERE name = ?", ["通用助手"]);
+      const hasDefault = db.exec("SELECT id FROM prompt_templates WHERE is_default = 1").length > 0
+      if (!hasDefault) {
+        const first = db.exec("SELECT id FROM prompt_templates ORDER BY id ASC LIMIT 1")
+        if (first.length > 0) {
+          const id = first[0].values[0][0]
+          db.run("UPDATE prompt_templates SET is_default = 1 WHERE id = ?", [id])
         }
       }
     }

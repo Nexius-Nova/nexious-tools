@@ -1,6 +1,6 @@
 import express from 'express'
 import { query, queryOne, execute } from '../db.js'
-import { getDefaultAiModel, getProviderConfig } from '../ai-utils.js'
+import { getDefaultAiModel, getAiModelById, getProviderConfig, getImageGenConfig, getVideoGenConfig } from '../ai-utils.js'
 import { scrapeWebpage, convertToMarkdown } from '../utils/web-scraper.js'
 
 const router = express.Router()
@@ -118,15 +118,23 @@ const buildMessageContent = (text, images = []) => {
   return content
 }
 
+const resolveAiModel = async (modelId) => {
+  if (modelId) {
+    const model = await getAiModelById(modelId)
+    if (model) return model
+  }
+  return getDefaultAiModel()
+}
+
 router.post('/chat', async (req, res) => {
-  const { message: userMessage, history = [], stream = true, systemPrompt: customSystemPrompt, continueFrom = null, temperature = 0.7, max_tokens = 4096, images = [] } = req.body
+  const { message: userMessage, history = [], stream = true, systemPrompt: customSystemPrompt, continueFrom = null, temperature = 0.7, max_tokens = 4096, images = [], model_id } = req.body
   
   if (!userMessage && !continueFrom && images.length === 0) {
     return res.status(400).json({ error: '消息不能为空' })
   }
   
   try {
-    const aiModel = await getDefaultAiModel()
+    const aiModel = await resolveAiModel(model_id)
     
     if (!aiModel) {
       return res.status(400).json({ error: '请先在设置中配置 AI 模型' })
@@ -311,6 +319,133 @@ ${continueFrom}
       errorMessage = '连接超时，请检查网络或尝试使用国内代理地址'
     }
     res.status(500).json({ error: errorMessage })
+  }
+})
+
+router.post('/generate-image', async (req, res) => {
+  const { prompt, model_id, size = '1024x1024', n = 1 } = req.body
+
+  if (!prompt) {
+    return res.status(400).json({ error: '图片描述不能为空' })
+  }
+
+  try {
+    let aiModel
+    if (model_id) {
+      aiModel = await getAiModelById(model_id)
+    }
+    if (!aiModel) {
+      aiModel = await getDefaultAiModel()
+    }
+
+    if (!aiModel) {
+      return res.status(400).json({ error: '请先在设置中配置 AI 模型' })
+    }
+
+    const { provider, api_key, base_url, model } = aiModel
+
+    const genConfig = getImageGenConfig(provider, base_url)
+
+    if (!genConfig) {
+      return res.status(400).json({ error: `当前提供商 ${provider} 不支持图片生成` })
+    }
+
+    const requestBody = {
+      model: model,
+      prompt,
+      n,
+      size: size || genConfig.size
+    }
+
+    if (genConfig.quality) {
+      requestBody.quality = genConfig.quality
+    }
+
+    const imageRes = await fetchWithTimeout(genConfig.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${api_key}`
+      },
+      body: JSON.stringify(requestBody)
+    }, 120000)
+
+    if (!imageRes.ok) {
+      const errorData = await imageRes.json().catch(() => ({}))
+      throw new Error(errorData.error?.message || `图片生成失败 (${imageRes.status})`)
+    }
+
+    const data = await imageRes.json()
+
+    const images = (data.data || []).map(item => ({
+      url: item.url || item.b64_json
+    }))
+
+    res.json({ data: { images } })
+  } catch (error) {
+    console.error('Image Generation Error:', error)
+    res.status(500).json({ error: error.message || '图片生成失败' })
+  }
+})
+
+router.post('/generate-video', async (req, res) => {
+  const { prompt, model_id } = req.body
+
+  if (!prompt) {
+    return res.status(400).json({ error: '视频描述不能为空' })
+  }
+
+  try {
+    let aiModel
+    if (model_id) {
+      aiModel = await getAiModelById(model_id)
+    }
+    if (!aiModel) {
+      aiModel = await getDefaultAiModel()
+    }
+
+    if (!aiModel) {
+      return res.status(400).json({ error: '请先在设置中配置 AI 模型' })
+    }
+
+    const { provider, api_key, base_url, model } = aiModel
+
+    const genConfig = getVideoGenConfig(provider, base_url)
+
+    if (!genConfig) {
+      return res.status(400).json({ error: `当前提供商 ${provider} 不支持视频生成` })
+    }
+
+    const requestBody = {
+      model: model,
+      prompt
+    }
+
+    const videoRes = await fetchWithTimeout(genConfig.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${api_key}`
+      },
+      body: JSON.stringify(requestBody)
+    }, 300000)
+
+    if (!videoRes.ok) {
+      const errorData = await videoRes.json().catch(() => ({}))
+      throw new Error(errorData.error?.message || `视频生成失败 (${videoRes.status})`)
+    }
+
+    const data = await videoRes.json()
+
+    const videos = (data.data || []).map(item => ({
+      url: item.url,
+      id: item.id
+    }))
+
+    res.json({ data: { videos } })
+  } catch (error) {
+    console.error('Video Generation Error:', error)
+    res.status(500).json({ error: error.message || '视频生成失败' })
   }
 })
 
@@ -758,6 +893,62 @@ ${webpageContent}`
   } catch (error) {
     console.error('Import URL Error:', error)
     res.status(500).json({ error: error.message || '导入网页失败' })
+  }
+})
+
+router.get('/proxy-download', async (req, res) => {
+  const { url } = req.query
+
+  if (!url) {
+    return res.status(400).json({ error: 'URL 不能为空' })
+  }
+
+  try {
+    const remoteRes = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    })
+
+    if (!remoteRes.ok) {
+      return res.status(remoteRes.status).json({ error: '获取资源失败' })
+    }
+
+    const contentType = remoteRes.headers.get('content-type') || 'application/octet-stream'
+    const filename = url.match(/\/([^/?#]+\.\w{3,4})(?:[?#]|$)/)
+      ? decodeURIComponent(url.match(/\/([^/?#]+\.\w{3,4})(?:[?#]|$)/)[1])
+      : `download-${Date.now()}.bin`
+
+    res.setHeader('Content-Type', contentType)
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`)
+    res.setHeader('Access-Control-Allow-Origin', '*')
+
+    if (remoteRes.body) {
+      const reader = remoteRes.body.getReader()
+      const pump = () => {
+        reader.read().then(({ done, value }) => {
+          if (done) {
+            res.end()
+            return
+          }
+          res.write(Buffer.from(value))
+          pump()
+        }).catch(err => {
+          console.error('Stream error:', err)
+          res.end()
+        })
+      }
+      pump()
+    } else {
+      const buffer = Buffer.from(await remoteRes.arrayBuffer())
+      res.setHeader('Content-Length', buffer.length)
+      res.end(buffer)
+    }
+  } catch (error) {
+    console.error('Proxy download error:', error)
+    if (!res.headersSent) {
+      res.status(500).json({ error: '下载失败: ' + error.message })
+    }
   }
 })
 

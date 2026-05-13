@@ -75,7 +75,7 @@ const menuOptions = [
     icon: renderIcon(DocumentTextOutline)
   },
   {
-    label: 'AI 助手',
+    label: 'AI 对话',
     key: 'ai',
     icon: renderIcon(ChatbubblesOutline)
   },
